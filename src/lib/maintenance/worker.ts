@@ -189,7 +189,7 @@ export function createMaintenanceWorker(): Worker {
       }
     },
     {
-      connection: getConnection(),
+      connection: getConnection() as never,
       concurrency: 1,
     }
   );

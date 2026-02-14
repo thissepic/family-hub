@@ -16,7 +16,7 @@ function getConnection(): IORedis {
 function getQueue(): Queue {
   if (!queue) {
     queue = new Queue("maintenance", {
-      connection: getConnection(),
+      connection: getConnection() as never,
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: "exponential", delay: 5000 },

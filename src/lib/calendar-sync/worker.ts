@@ -241,7 +241,7 @@ async function processJob(job: Job<SyncJobData>): Promise<void> {
  */
 export function createSyncWorker(): Worker {
   const worker = new Worker("calendar-sync", processJob, {
-    connection: getConnection(),
+    connection: getConnection() as never,
     concurrency: 3,
   });
 
