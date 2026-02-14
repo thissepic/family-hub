@@ -78,6 +78,7 @@ export const calendarSyncRouter = router({
           include: {
             _count: { select: { events: true } },
           },
+          orderBy: { name: "asc" },
         },
       },
       orderBy: { createdAt: "desc" },
