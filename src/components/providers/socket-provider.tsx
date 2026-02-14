@@ -26,9 +26,13 @@ export function SocketProvider({ children }: SocketProviderProps) {
   useEffect(() => {
     if (!session?.familyId) return;
 
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
+    // Derive socket URL from current window location (proxied through Caddy /socket.io/)
+    const socketUrl = typeof window !== "undefined"
+      ? `${window.location.protocol}//${window.location.host}`
+      : (process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001");
 
     const s: TypedSocket = io(socketUrl, {
+      path: "/socket.io/",
       transports: ["websocket", "polling"],
       query: { familyId: session.familyId },
     });
