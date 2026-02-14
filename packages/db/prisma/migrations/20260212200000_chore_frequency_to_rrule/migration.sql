@@ -1,6 +1,7 @@
 -- AlterTable: Add new columns with defaults
 ALTER TABLE "Chore" ADD COLUMN "recurrenceRule" TEXT NOT NULL DEFAULT 'RRULE:FREQ=WEEKLY';
 ALTER TABLE "Chore" ADD COLUMN "recurrenceStart" TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE "Chore" ALTER COLUMN "recurrenceStart" SET DATA TYPE TIMESTAMP(3);
 
 -- Data migration: Convert existing enum values to RRULE strings
 UPDATE "Chore" SET "recurrenceRule" = 'RRULE:FREQ=DAILY', "recurrenceStart" = DATE_TRUNC('day', "createdAt") WHERE "frequency" = 'DAILY';
