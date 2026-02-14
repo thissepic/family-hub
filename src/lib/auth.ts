@@ -78,7 +78,7 @@ export async function setAccountSession(
   cookieStore.set(SESSION_COOKIE_NAME, sealed, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
     path: "/",
     maxAge: ttl,
   });
@@ -119,7 +119,7 @@ export async function upgradeSession(
   cookieStore.set(SESSION_COOKIE_NAME, sealed, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
     path: "/",
     maxAge: ttl,
   });
@@ -149,7 +149,7 @@ export async function downgradeSession(): Promise<void> {
   cookieStore.set(SESSION_COOKIE_NAME, sealed, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
     path: "/",
     maxAge: ttl,
   });
