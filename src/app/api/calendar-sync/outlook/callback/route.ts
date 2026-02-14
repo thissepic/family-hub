@@ -17,11 +17,12 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.url;
   const baseRedirect = "/settings?tab=calendars";
 
   if (error || !code || !state) {
     return NextResponse.redirect(
-      new URL(`${baseRedirect}&error=outlook_auth_failed`, request.url)
+      new URL(`${baseRedirect}&error=outlook_auth_failed`, appUrl)
     );
   }
 
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     if (!stateData.memberId || !stateData.familyId) {
       return NextResponse.redirect(
-        new URL(`${baseRedirect}&error=outlook_auth_failed`, request.url)
+        new URL(`${baseRedirect}&error=outlook_auth_failed`, appUrl)
       );
     }
 
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     if (!result.accessToken) {
       return NextResponse.redirect(
-        new URL(`${baseRedirect}&error=outlook_auth_failed`, request.url)
+        new URL(`${baseRedirect}&error=outlook_auth_failed`, appUrl)
       );
     }
 
@@ -141,12 +142,12 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.redirect(
-      new URL(`${baseRedirect}&connected=outlook`, request.url)
+      new URL(`${baseRedirect}&connected=outlook`, appUrl)
     );
   } catch (err) {
     console.error("Outlook OAuth callback error:", err);
     return NextResponse.redirect(
-      new URL(`${baseRedirect}&error=outlook_auth_failed`, request.url)
+      new URL(`${baseRedirect}&error=outlook_auth_failed`, appUrl)
     );
   }
 }

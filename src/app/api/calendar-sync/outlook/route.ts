@@ -4,6 +4,7 @@ import { sealData } from "iron-session";
 import { getSession } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.url;
   const baseRedirect = "/settings?tab=calendars";
 
   const clientId = process.env.MICROSOFT_CLIENT_ID;
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   if (!clientId || !clientSecret || !redirectUri) {
     return NextResponse.redirect(
-      new URL(`${baseRedirect}&error=outlook_not_configured`, request.url)
+      new URL(`${baseRedirect}&error=outlook_not_configured`, appUrl)
     );
   }
 
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
     const session = await getSession();
     if (!session?.memberId || !session?.familyId) {
       return NextResponse.redirect(
-        new URL(`${baseRedirect}&error=outlook_auth_failed`, request.url)
+        new URL(`${baseRedirect}&error=outlook_auth_failed`, appUrl)
       );
     }
 
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error("Outlook OAuth initiation error:", err);
     return NextResponse.redirect(
-      new URL(`${baseRedirect}&error=outlook_auth_failed`, request.url)
+      new URL(`${baseRedirect}&error=outlook_auth_failed`, appUrl)
     );
   }
 }
