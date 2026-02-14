@@ -1,0 +1,832 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum MemberRole {
+  ADMIN
+  MEMBER
+}
+
+enum CalendarEventSource {
+  LOCAL
+  GOOGLE
+  APPLE
+  OUTLOOK
+  CALDAV
+  EXCHANGE_EWS
+}
+
+enum CalendarEventCategory {
+  SCHOOL
+  WORK
+  MEDICAL
+  SPORTS
+  SOCIAL
+  FAMILY
+  OTHER
+}
+
+enum CalendarProvider {
+  GOOGLE
+  APPLE
+  OUTLOOK
+  CALDAV
+  EXCHANGE_EWS
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum PrivacyMode {
+  FULL_DETAILS
+  BUSY_FREE_ONLY
+}
+
+enum SyncDirection {
+  INBOUND_ONLY
+  TWO_WAY
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+
+enum ChoreDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum RotationPattern {
+  ROUND_ROBIN
+  RANDOM
+  WEIGHTED
+}
+
+enum ChoreInstanceStatus {
+  PENDING
+  DONE
+  PENDING_REVIEW
+  OVERDUE
+  SKIPPED
+}
+
+enum SwapRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum MealSlot {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum XpSource {
+  TASK_COMPLETION
+  CHORE_COMPLETION
+  STREAK_BONUS
+  SWAP_BONUS
+  CUSTOM
+}
+
+enum AchievementRarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+enum RedemptionStatus {
+  PENDING_APPROVAL
+  APPROVED
+  DECLINED
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum XpMode {
+  COMPETITIVE
+  COLLABORATIVE
+}
+
+enum NotificationType {
+  CALENDAR_REMINDER
+  CHORE_DEADLINE
+  SWAP_REQUEST
+  REWARD_APPROVAL
+  ACHIEVEMENT
+  LEVEL_UP
+  ADMIN_ANNOUNCEMENT
+}
+
+enum ActivityEventType {
+  TASK_COMPLETED
+  CHORE_COMPLETED
+  EVENT_CREATED
+  EVENT_UPDATED
+  SHOPPING_ITEM_ADDED
+  MEAL_PLANNED
+  NOTE_PINNED
+  ACHIEVEMENT_UNLOCKED
+  LEVEL_UP
+  REWARD_REDEEMED
+}
+
+enum HubLayoutMode {
+  AUTO
+  CUSTOM
+}
+
+enum FontScale {
+  SMALL
+  MEDIUM
+  LARGE
+  XL
+}
+
+enum ThemeMode {
+  LIGHT
+  DARK
+  AUTO
+}
+
+// ─── Models ─────────────────────────────────────────────────────────────────
+
+model Family {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  passwordHash  String
+  emailVerified Boolean  @default(false)
+  defaultLocale String   @default("en")
+  theme         ThemeMode @default(AUTO)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  members            FamilyMember[]
+  calendarEvents     CalendarEvent[]
+  tasks              Task[]
+  chores             Chore[]
+  choreSets          ChoreSet[]
+  shoppingLists      ShoppingList[]
+  mealPlans          MealPlan[]
+  recipes            Recipe[]
+  notes              Note[]
+  hubDisplaySettings HubDisplaySettings?
+  achievements       Achievement[]
+  rewards            Reward[]
+  familyGoals        FamilyGoal[]
+  xpSettings         XpSettings?
+  activityEvents     ActivityEvent[]
+  loginAttempts      LoginAttempt[]
+  activeSessions     ActiveSession[]
+}
+
+model FamilyMember {
+  id              String     @id @default(cuid())
+  familyId        String
+  name            String
+  avatar          String?
+  color           String     @default("#3b82f6")
+  pinHash         String
+  role            MemberRole @default(MEMBER)
+  locale          String?
+  themePreference ThemeMode  @default(AUTO)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  createdCalendarEvents      CalendarEvent[]          @relation("CreatedByMember")
+  eventAssignments           EventAssignee[]
+  externalCalendarConnections ExternalCalendarConnection[]
+  createdTasks               Task[]                   @relation("TaskCreatedBy")
+  taskAssignments            TaskAssignee[]
+  taskCompletions            TaskCompletion[]
+  createdChores              Chore[]                  @relation("ChoreCreatedBy")
+  choreAssignments           ChoreAssignee[]
+  assignedChoreInstances     ChoreInstance[]          @relation("ChoreAssignedTo")
+  verifiedChoreInstances     ChoreInstance[]          @relation("ChoreVerifiedBy")
+  sentSwapRequests           ChoreSwapRequest[]       @relation("SwapRequester")
+  receivedSwapRequests       ChoreSwapRequest[]       @relation("SwapTarget")
+  addedShoppingItems         ShoppingItem[]           @relation("ShoppingItemAddedBy")
+  checkedShoppingItems       ShoppingItem[]           @relation("ShoppingItemCheckedBy")
+  createdRecipes             Recipe[]                 @relation("RecipeCreatedBy")
+  createdNotes               Note[]                   @relation("NoteCreatedBy")
+  xpProfile                  MemberXpProfile?
+  xpEvents                   XpEvent[]
+  memberAchievements         MemberAchievement[]
+  rewardRedemptions          RewardRedemption[]
+  reviewedRedemptions        RewardRedemption[]       @relation("RedemptionReviewedBy")
+  createdRewards             Reward[]                 @relation("RewardCreatedBy")
+  notifications              Notification[]
+  activityEvents             ActivityEvent[]
+  pushSubscriptions          PushSubscription[]
+  notificationPreferences    NotificationPreference[]
+
+  @@index([familyId])
+}
+
+model CalendarEvent {
+  id               String                @id @default(cuid())
+  familyId         String
+  title            String
+  description      String?
+  location         String?
+  startAt          DateTime
+  endAt            DateTime
+  allDay           Boolean               @default(false)
+  recurrenceRule   String?
+  category         CalendarEventCategory @default(OTHER)
+  createdById      String?
+  source           CalendarEventSource   @default(LOCAL)
+  externalId       String?
+  externalCalendarId String?
+  isReadOnly       Boolean               @default(false)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  family           Family           @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdBy        FamilyMember?    @relation("CreatedByMember", fields: [createdById], references: [id], onDelete: SetNull)
+  externalCalendar ExternalCalendar? @relation(fields: [externalCalendarId], references: [id], onDelete: SetNull)
+  assignees        EventAssignee[]
+
+  @@index([familyId])
+  @@index([startAt])
+  @@index([externalId, source])
+}
+
+model EventAssignee {
+  id       String @id @default(cuid())
+  eventId  String
+  memberId String
+
+  event  CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  member FamilyMember  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, memberId])
+}
+
+model ExternalCalendarConnection {
+  id                    String           @id @default(cuid())
+  memberId              String
+  provider              CalendarProvider
+  accountLabel          String
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String?
+  tokenExpiresAt        DateTime?
+  caldavUrl             String?
+  syncEnabled           Boolean          @default(true)
+  lastSyncAt            DateTime?
+  syncIntervalMinutes   Int              @default(15)
+  status                ConnectionStatus @default(ACTIVE)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  member    FamilyMember       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  calendars ExternalCalendar[]
+
+  @@index([memberId])
+}
+
+model ExternalCalendar {
+  id                 String        @id @default(cuid())
+  connectionId       String
+  externalCalendarId String
+  name               String
+  color              String?
+  syncEnabled        Boolean       @default(true)
+  privacyMode        PrivacyMode   @default(FULL_DETAILS)
+  syncDirection      SyncDirection @default(INBOUND_ONLY)
+  lastSyncToken      String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  connection ExternalCalendarConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  events     CalendarEvent[]
+
+  @@index([connectionId])
+}
+
+model Task {
+  id             String       @id @default(cuid())
+  familyId       String
+  title          String
+  description    String?
+  priority       TaskPriority @default(MEDIUM)
+  recurrenceRule String?
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  family    Family         @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdBy FamilyMember?  @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  assignees TaskAssignee[]
+  completions TaskCompletion[]
+
+  @@index([familyId])
+}
+
+model TaskAssignee {
+  id       String @id @default(cuid())
+  taskId   String
+  memberId String
+
+  task   Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, memberId])
+}
+
+model TaskCompletion {
+  id          String   @id @default(cuid())
+  taskId      String
+  memberId    String
+  date        DateTime @db.Date
+  completedAt DateTime @default(now())
+
+  task   Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, memberId, date])
+  @@index([taskId])
+  @@index([memberId])
+}
+
+model Chore {
+  id               String          @id @default(cuid())
+  familyId         String
+  title            String
+  description      String?
+  category         String          @default("General")
+  recurrenceRule   String          @default("RRULE:FREQ=WEEKLY")
+  recurrenceStart  DateTime        @default(now())
+  difficulty       ChoreDifficulty @default(MEDIUM)
+  estimatedMinutes Int?
+  needsVerification Boolean        @default(false)
+  rotationPattern  RotationPattern @default(ROUND_ROBIN)
+  createdById      String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  choreSetId   String?
+
+  family    Family          @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdBy FamilyMember?   @relation("ChoreCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  choreSet  ChoreSet?       @relation(fields: [choreSetId], references: [id], onDelete: SetNull)
+  assignees ChoreAssignee[]
+  instances ChoreInstance[]
+
+  @@index([familyId])
+  @@index([choreSetId])
+}
+
+model ChoreAssignee {
+  id        String @id @default(cuid())
+  choreId   String
+  memberId  String
+  sortOrder Int    @default(0)
+
+  chore  Chore        @relation(fields: [choreId], references: [id], onDelete: Cascade)
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([choreId, memberId])
+}
+
+model ChoreInstance {
+  id               String              @id @default(cuid())
+  choreId          String
+  assignedMemberId String
+  periodStart      DateTime            @db.Date
+  periodEnd        DateTime            @db.Date
+  status           ChoreInstanceStatus @default(PENDING)
+  completedAt      DateTime?
+  verifiedById     String?
+  verifiedAt       DateTime?
+
+  chore          Chore              @relation(fields: [choreId], references: [id], onDelete: Cascade)
+  assignedMember FamilyMember       @relation("ChoreAssignedTo", fields: [assignedMemberId], references: [id], onDelete: Cascade)
+  verifiedBy     FamilyMember?      @relation("ChoreVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  swapRequests   ChoreSwapRequest[]
+
+  @@index([choreId])
+  @@index([assignedMemberId])
+  @@index([periodStart])
+  @@index([periodStart, periodEnd])
+}
+
+model ChoreSwapRequest {
+  id              String            @id @default(cuid())
+  choreInstanceId String
+  requesterId     String
+  targetMemberId  String
+  status          SwapRequestStatus @default(PENDING)
+  respondedAt     DateTime?
+  createdAt       DateTime          @default(now())
+
+  choreInstance ChoreInstance @relation(fields: [choreInstanceId], references: [id], onDelete: Cascade)
+  requester     FamilyMember  @relation("SwapRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  targetMember  FamilyMember  @relation("SwapTarget", fields: [targetMemberId], references: [id], onDelete: Cascade)
+
+  @@index([choreInstanceId])
+}
+
+model ShoppingList {
+  id        String   @id @default(cuid())
+  familyId  String
+  name      String   @default("Groceries")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  family Family         @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  items  ShoppingItem[]
+
+  @@index([familyId])
+}
+
+model ShoppingItem {
+  id          String   @id @default(cuid())
+  listId      String
+  name        String
+  quantity    String?
+  unit        String?
+  category    String?
+  addedById   String?
+  checked     Boolean  @default(false)
+  checkedById String?
+  isRecurring Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  list      ShoppingList  @relation(fields: [listId], references: [id], onDelete: Cascade)
+  addedBy   FamilyMember? @relation("ShoppingItemAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  checkedBy FamilyMember? @relation("ShoppingItemCheckedBy", fields: [checkedById], references: [id], onDelete: SetNull)
+
+  @@index([listId])
+}
+
+model MealPlan {
+  id           String   @id @default(cuid())
+  familyId     String
+  date         DateTime @db.Date
+  slot         MealSlot
+  recipeId     String?
+  freeformName String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  family Family  @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  recipe Recipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+
+  @@unique([familyId, date, slot])
+  @@index([familyId])
+}
+
+model Recipe {
+  id          String   @id @default(cuid())
+  familyId    String
+  title       String
+  instructions String?
+  servings    Int?
+  prepTime    Int?
+  cookTime    Int?
+  tags        String[] @default([])
+  image       String?
+  isFavorite  Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  family      Family             @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdBy   FamilyMember?      @relation("RecipeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  ingredients RecipeIngredient[]
+  mealPlans   MealPlan[]
+
+  @@index([familyId])
+}
+
+model RecipeIngredient {
+  id       String  @id @default(cuid())
+  recipeId String
+  name     String
+  quantity String?
+  unit     String?
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId])
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  familyId    String
+  title       String
+  body        Json?
+  color       String?
+  pinned      Boolean  @default(false)
+  category    String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  family      Family           @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdBy   FamilyMember?    @relation("NoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  attachments NoteAttachment[]
+
+  @@index([familyId])
+  @@index([pinned])
+}
+
+model NoteAttachment {
+  id        String   @id @default(cuid())
+  noteId    String
+  filename  String
+  path      String
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId])
+}
+
+model HubDisplaySettings {
+  id                  String      @id @default(cuid())
+  familyId            String      @unique
+  visiblePanels       Json        @default("[]")
+  layoutMode          HubLayoutMode @default(AUTO)
+  columnConfig        Json?
+  rotationEnabled     Boolean     @default(false)
+  rotationIntervalSec Int         @default(30)
+  theme               ThemeMode   @default(DARK)
+  fontScale           FontScale   @default(MEDIUM)
+  nightDimEnabled     Boolean     @default(false)
+  nightDimStart       String?     @default("22:00")
+  nightDimEnd         String?     @default("06:00")
+  weatherEnabled      Boolean     @default(false)
+  weatherLocationLat  Float?
+  weatherLocationLon  Float?
+  accessToken         String?
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+}
+
+model MemberXpProfile {
+  id            String @id @default(cuid())
+  memberId      String @unique
+  totalXp       Int    @default(0)
+  level         Int    @default(1)
+  currentStreak Int    @default(0)
+  longestStreak Int    @default(0)
+  points        Int    @default(0)
+
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+}
+
+model XpEvent {
+  id           String   @id @default(cuid())
+  memberId     String
+  xpAmount     Int
+  pointsAmount Int      @default(0)
+  source       XpSource
+  sourceId     String?
+  multiplier   Float    @default(1.0)
+  description  String
+  earnedAt     DateTime @default(now())
+
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([earnedAt])
+}
+
+model Achievement {
+  id           String           @id @default(cuid())
+  familyId     String
+  name         String
+  description  String?
+  iconUrl      String?
+  condition    Json
+  rarity       AchievementRarity @default(COMMON)
+  xpReward     Int              @default(0)
+  pointsReward Int              @default(0)
+  isCustom     Boolean          @default(false)
+  enabled      Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+
+  family             Family              @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  memberAchievements MemberAchievement[]
+
+  @@index([familyId])
+}
+
+model MemberAchievement {
+  id            String   @id @default(cuid())
+  memberId      String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+
+  member      FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  achievement Achievement  @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, achievementId])
+}
+
+model Reward {
+  id               String   @id @default(cuid())
+  familyId         String
+  title            String
+  description      String?
+  iconUrl          String?
+  pointCost        Int
+  requiresApproval Boolean  @default(true)
+  enabled          Boolean  @default(true)
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  family      Family             @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdBy   FamilyMember?      @relation("RewardCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  redemptions RewardRedemption[]
+
+  @@index([familyId])
+}
+
+model RewardRedemption {
+  id           String           @id @default(cuid())
+  rewardId     String
+  memberId     String
+  pointsSpent  Int
+  status       RedemptionStatus @default(PENDING_APPROVAL)
+  requestedAt  DateTime         @default(now())
+  reviewedById String?
+  reviewedAt   DateTime?
+
+  reward     Reward        @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  member     FamilyMember  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  reviewedBy FamilyMember? @relation("RedemptionReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([rewardId])
+  @@index([memberId])
+}
+
+model FamilyGoal {
+  id                String     @id @default(cuid())
+  familyId          String
+  title             String
+  description       String?
+  targetXp          Int
+  currentXp         Int        @default(0)
+  rewardDescription String?
+  status            GoalStatus @default(ACTIVE)
+  startedAt         DateTime   @default(now())
+  completedAt       DateTime?
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+}
+
+model XpSettings {
+  id                String @id @default(cuid())
+  familyId          String @unique
+  taskXpValues      Json   @default("{\"LOW\": 5, \"MEDIUM\": 10, \"HIGH\": 20}")
+  choreXpValues     Json   @default("{\"EASY\": 10, \"MEDIUM\": 25, \"HARD\": 50}")
+  streakMultipliers Json   @default("{\"7\": 1.5, \"14\": 2.0, \"30\": 3.0}")
+  pointsPerXpRatio  Float  @default(0.1)
+  mode              XpMode @default(COMPETITIVE)
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id           String           @id @default(cuid())
+  memberId     String
+  type         NotificationType
+  title        String
+  message      String
+  linkUrl      String?
+  sourceModule String?
+  sourceId     String?
+  read         Boolean          @default(false)
+  readAt       DateTime?
+  pushSent     Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([createdAt])
+}
+
+model ActivityEvent {
+  id           String            @id @default(cuid())
+  familyId     String
+  memberId     String
+  type         ActivityEventType
+  description  String
+  sourceModule String?
+  sourceId     String?
+  metadata     Json?
+  createdAt    DateTime          @default(now())
+
+  family Family       @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@index([createdAt])
+}
+
+model ChoreSet {
+  id          String   @id @default(cuid())
+  familyId    String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  chores Chore[]
+
+  @@index([familyId])
+}
+
+model PushSubscription {
+  id        String       @id @default(cuid())
+  memberId  String
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime     @default(now())
+
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, endpoint])
+  @@index([memberId])
+}
+
+model NotificationPreference {
+  id       String           @id @default(cuid())
+  memberId String
+  type     NotificationType
+  muted    Boolean          @default(false)
+
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, type])
+}
+
+// ─── Security Models ────────────────────────────────────────────────────────
+
+model LoginAttempt {
+  id            String   @id @default(cuid())
+  familyId      String?
+  email         String?
+  ipAddress     String
+  userAgent     String?
+  success       Boolean
+  failureReason String?
+  createdAt     DateTime @default(now())
+
+  family Family? @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([ipAddress])
+  @@index([createdAt])
+}
+
+model ActiveSession {
+  id           String   @id @default(cuid())
+  familyId     String
+  memberId     String?
+  sessionToken String   @unique
+  ipAddress    String
+  userAgent    String?
+  lastActivity DateTime @default(now())
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@index([expiresAt])
+}

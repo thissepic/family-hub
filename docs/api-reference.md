@@ -1,0 +1,291 @@
+# API Reference
+
+Family Hub uses [tRPC 11](https://trpc.io/) for its API layer. All procedures are type-safe from client to server via shared TypeScript types. The API is accessed at `/api/trpc`.
+
+## Authorization
+
+Every procedure uses one of four authorization levels:
+
+| Symbol | Level | Description |
+|---|---|---|
+| -- | `public` | No authentication required |
+| :key: | `account` | Account-level session required (email/password login completed) |
+| :lock: | `protected` | Full session required (account login + profile selected) |
+| :shield: | `admin` | Full session with ADMIN role required |
+
+## Routers
+
+### account
+
+Account-level authentication (email/password login, session management).
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `login` | mutation | public | Authenticate with email + password, create account session |
+| `listMembers` | query | :key: | List family members for profile selection (after account login) |
+| `changePassword` | mutation | :shield: | Change the family account password |
+| `changeEmail` | mutation | :shield: | Change the family account email (requires password verification) |
+| `activeSessions` | query | :shield: | List all active sessions for the family |
+| `invalidateSession` | mutation | :shield: | Remotely invalidate a specific session |
+| `loginAttempts` | query | :shield: | View login attempt history |
+
+### auth
+
+Profile selection, switching, and session lifecycle.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `selectProfile` | mutation | :key: | Verify PIN and upgrade to full session |
+| `switchProfile` | mutation | :key: | Downgrade full session back to account-level (return to profile selection) |
+| `logout` | mutation | public | Clear session cookie and remove active session |
+| `getSession` | query | public | Return current session data (familyId, memberId, role) |
+| `hasFamily` | query | public | Check if any family exists (used to decide login vs. setup vs. register) |
+
+### family
+
+Family CRUD, registration, and settings.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `get` | query | :lock: | Get family details with all members |
+| `register` | mutation | public | Register a new family with account credentials + admin profile (rate-limited) |
+| `update` | mutation | :shield: | Update family name, locale, theme |
+| `deleteFamily` | mutation | :shield: | Delete the entire family and all associated data (requires confirmation) |
+
+### members
+
+Manage family members.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `list` | query | :lock: | List all members of the family |
+| `update` | mutation | :lock: | Update member profile (members can update self, admins can update anyone) |
+| `adminCreate` | mutation | :shield: | Admin-initiated member creation with automatic XP profile setup |
+| `updateRole` | mutation | :shield: | Change member role ADMIN/MEMBER (safeguard: cannot demote last admin) |
+| `adminResetPin` | mutation | :shield: | Reset another member's PIN |
+| `delete` | mutation | :shield: | Remove a member (safeguard: cannot delete last admin) |
+| `changePin` | mutation | :lock: | Change own PIN (requires current PIN verification) |
+
+### calendar
+
+Local calendar event CRUD.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `list` | query | :lock: | List events in date range (expands recurrence rules) |
+| `create` | mutation | :lock: | Create a calendar event |
+| `update` | mutation | :lock: | Update an event |
+| `delete` | mutation | :lock: | Delete an event |
+| `listConflicts` | query | :lock: | Find overlapping events for given time range |
+| `importIcal` | mutation | :lock: | Import events from iCal (.ics) data |
+| `exportIcal` | query | :lock: | Export events as iCal format |
+| `getCategories` | query | :lock: | List available event categories |
+
+### calendarSync
+
+External calendar provider management.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `getGoogleAuthUrl` | query | :lock: | Generate Google OAuth URL |
+| `listConnections` | query | :lock: | List all external calendar connections |
+| `getConnection` | query | :lock: | Get single connection with calendars |
+| `deleteConnection` | mutation | :lock: | Disconnect and delete a connection |
+| `updateCalendar` | mutation | :lock: | Toggle sync, privacy mode, sync direction |
+| `triggerSync` | mutation | :lock: | Force immediate sync for a connection |
+| `refreshCalendarList` | mutation | :lock: | Re-discover calendars from the provider |
+| `connectCaldav` | mutation | :lock: | Connect via CalDAV URL + credentials |
+| `connectEws` | mutation | :lock: | Connect via Exchange EWS URL + credentials |
+| `reconnect` | mutation | :lock: | Re-authorize an expired OAuth connection |
+
+### tasks
+
+Daily task management.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `list` | query | :lock: | List tasks (with filters for date, member, completion) |
+| `create` | mutation | :lock: | Create a task |
+| `update` | mutation | :lock: | Update a task |
+| `delete` | mutation | :lock: | Delete a task |
+| `complete` | mutation | :lock: | Mark task complete for a date (awards XP) |
+| `uncomplete` | mutation | :lock: | Undo completion (removes XP) |
+| `getHistory` | query | :lock: | Get completion history for a task |
+| `listTemplates` | query | :lock: | List saved task templates |
+
+### chores
+
+Chore management, rotation, verification, and swaps.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `list` | query | :lock: | List all chores with current instances |
+| `getById` | query | :lock: | Get single chore with full details |
+| `create` | mutation | :shield: | Create a chore with rotation pool |
+| `update` | mutation | :shield: | Update chore settings |
+| `delete` | mutation | :shield: | Delete a chore |
+| `listMyInstances` | query | :lock: | Get current member's assigned instances |
+| `completeInstance` | mutation | :lock: | Mark instance done (awards XP) |
+| `uncompleteInstance` | mutation | :lock: | Undo completion (removes XP) |
+| `verifyInstance` | mutation | :shield: | Verify a completed instance (PENDING_REVIEW -> DONE) |
+| `skipInstance` | mutation | :shield: | Skip an instance (no XP) |
+| `requestSwap` | mutation | :lock: | Request to swap instance with another member |
+| `respondToSwap` | mutation | :lock: | Accept or decline a swap request |
+| `mySwapRequests` | query | :lock: | List pending swap requests |
+| `fairnessStats` | query | :lock: | Get completion counts per member |
+| `listSets` | query | :lock: | List chore sets |
+| `createSet` | mutation | :shield: | Create a chore set |
+| `updateSet` | mutation | :shield: | Update a chore set |
+| `deleteSet` | mutation | :shield: | Delete a chore set |
+| `addChoreToSet` | mutation | :shield: | Add a chore to a set |
+| `removeChoreFromSet` | mutation | :shield: | Remove a chore from a set |
+
+### shopping
+
+Collaborative shopping lists.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `list` | query | :lock: | List all shopping lists |
+| `listItems` | query | :lock: | List items in a shopping list |
+| `addItem` | mutation | :lock: | Add an item (emits Socket.IO event) |
+| `updateItem` | mutation | :lock: | Update an item (emits Socket.IO event) |
+| `checkItem` | mutation | :lock: | Toggle checked state (emits Socket.IO event) |
+| `deleteItem` | mutation | :lock: | Delete an item (emits Socket.IO event) |
+| `clearChecked` | mutation | :lock: | Remove all checked items (emits Socket.IO event) |
+| `importList` | mutation | :lock: | Import items from text |
+| `createList` | mutation | :lock: | Create a new shopping list |
+| `deleteList` | mutation | :lock: | Delete a shopping list |
+
+### meals
+
+Meal planning and recipe management.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `list` | query | :lock: | List meal plans for a date range |
+| `plan` | mutation | :lock: | Assign a recipe to a date + slot |
+| `unplan` | mutation | :lock: | Remove a meal plan entry |
+| `listRecipes` | query | :lock: | List all recipes |
+| `createRecipe` | mutation | :lock: | Create a recipe |
+| `updateRecipe` | mutation | :lock: | Update a recipe |
+| `deleteRecipe` | mutation | :lock: | Delete a recipe |
+| `getRecipe` | query | :lock: | Get single recipe with ingredients |
+| `generateShoppingList` | mutation | :lock: | Generate shopping items from a date range's meal plans |
+| `importRecipe` | mutation | :lock: | Import recipe from URL or text |
+
+### notes
+
+Rich-text notes and bulletin board.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `list` | query | :lock: | List notes (pinned first) |
+| `create` | mutation | :lock: | Create a note |
+| `update` | mutation | :lock: | Update a note (title, body, color) |
+| `delete` | mutation | :lock: | Delete a note |
+| `pin` | mutation | :lock: | Pin a note |
+| `unpin` | mutation | :lock: | Unpin a note |
+| `addAttachment` | mutation | :lock: | Attach a file to a note |
+
+### rewards
+
+XP, achievements, rewards shop, and family goals.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `getProfile` | query | :lock: | Get member's XP profile (level, streak, points) |
+| `getXpHistory` | query | :lock: | Get paginated XP event history |
+| `getLeaderboard` | query | :lock: | Get family leaderboard (sorted by XP) |
+| `getSettings` | query | :lock: | Get family XP settings |
+| `updateSettings` | mutation | :shield: | Update XP values, multipliers, mode |
+| `listRewards` | query | :lock: | List available rewards |
+| `createReward` | mutation | :shield: | Create a reward |
+| `updateReward` | mutation | :shield: | Update a reward |
+| `deleteReward` | mutation | :shield: | Delete a reward |
+| `redeem` | mutation | :lock: | Redeem points for a reward |
+| `listRedemptions` | query | :lock: | List redemption history |
+| `reviewRedemption` | mutation | :shield: | Approve or decline a redemption |
+| `listAchievements` | query | :lock: | List all achievements (with unlock status) |
+| `createAchievement` | mutation | :shield: | Create a custom achievement |
+| `updateAchievement` | mutation | :shield: | Update an achievement |
+| `deleteAchievement` | mutation | :shield: | Delete an achievement |
+| `listGoals` | query | :lock: | List family goals |
+| `createGoal` | mutation | :shield: | Create a family XP goal |
+| `updateGoal` | mutation | :shield: | Update a goal |
+| `deleteGoal` | mutation | :shield: | Delete a goal |
+
+### notifications
+
+In-app notification management.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `list` | query | :lock: | List notifications (paginated, newest first) |
+| `markAsRead` | mutation | :lock: | Mark a single notification as read |
+| `markAllAsRead` | mutation | :lock: | Mark all notifications as read |
+| `delete` | mutation | :lock: | Delete a notification |
+| `getPreferences` | query | :lock: | Get notification mute settings |
+| `updatePreferences` | mutation | :lock: | Mute/unmute notification types |
+| `getUnreadCount` | query | :lock: | Get count of unread notifications |
+
+### activity
+
+Family activity feed.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `list` | query | :lock: | List activity events (paginated, filterable by member/date) |
+
+### search
+
+Full-text search across all modules.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `search` | query | :lock: | PostgreSQL full-text search across events, tasks, chores, notes, recipes |
+
+### hub
+
+Data aggregation and settings for the hub/kiosk display.
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `getData` | query | public | Fetch aggregated panel data (token-authenticated via query parameter) |
+| `getSettings` | query | :shield: | Get hub display settings |
+| `updateSettings` | mutation | :shield: | Update hub display configuration |
+| `generateToken` | mutation | :shield: | Generate a new access token for hub URL |
+| `revokeToken` | mutation | :shield: | Revoke the current access token |
+
+## Client Usage
+
+```typescript
+import { useTRPC } from "@/lib/trpc/client";
+import { useQuery, useMutation } from "@tanstack/react-query";
+
+function MyComponent() {
+  const trpc = useTRPC();
+
+  // Query
+  const { data } = useQuery(trpc.tasks.list.queryOptions({ date: "2025-01-15" }));
+
+  // Mutation
+  const completeMutation = useMutation(trpc.tasks.complete.mutationOptions());
+  completeMutation.mutate({ taskId: "...", date: "2025-01-15" });
+}
+```
+
+## REST API Routes
+
+In addition to tRPC, the following REST endpoints exist:
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/calendar-sync/google` | GET | Initiate Google OAuth flow |
+| `/api/calendar-sync/google/callback` | GET | Google OAuth callback |
+| `/api/calendar-sync/outlook` | GET | Initiate Microsoft OAuth flow |
+| `/api/calendar-sync/outlook/callback` | GET | Microsoft OAuth callback |
+| `/api/push/subscribe` | POST | Register a Web Push subscription |
+| `/api/push/unsubscribe` | POST | Remove a Web Push subscription |
+| `/api/uploads` | POST | Upload a file (returns filename) |
+| `/api/uploads/[filename]` | GET | Retrieve an uploaded file |

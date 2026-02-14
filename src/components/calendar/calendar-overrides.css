@@ -1,0 +1,193 @@
+/* FullCalendar theme overrides — maps FC variables to app design tokens */
+
+:root {
+  --fc-border-color: var(--border);
+  --fc-page-bg-color: var(--background);
+  --fc-neutral-bg-color: var(--muted);
+  --fc-neutral-text-color: var(--muted-foreground);
+  --fc-today-bg-color: oklch(0.95 0.02 250);
+  --fc-button-bg-color: var(--primary);
+  --fc-button-border-color: var(--primary);
+  --fc-button-hover-bg-color: var(--primary);
+  --fc-button-hover-border-color: var(--primary);
+  --fc-button-active-bg-color: var(--primary);
+  --fc-button-active-border-color: var(--primary);
+  --fc-event-border-color: transparent;
+}
+
+.dark {
+  --fc-today-bg-color: oklch(0.25 0.015 250);
+}
+
+/* General */
+.fc {
+  font-family: inherit;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+/* Button styling */
+.fc .fc-button {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 0.375rem 0.75rem;
+  border-radius: calc(var(--radius) - 2px);
+  text-transform: capitalize;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.fc .fc-button:not(.fc-button-active):not(:disabled) {
+  background-color: transparent;
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.fc .fc-button:not(.fc-button-active):hover {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+/* Today button when already on today — give it enough contrast */
+.fc .fc-button:disabled {
+  background-color: var(--muted);
+  border-color: var(--border);
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+
+.dark .fc .fc-button:disabled {
+  background-color: var(--accent);
+  color: var(--foreground);
+  opacity: 0.6;
+}
+
+.fc .fc-button-active,
+.fc .fc-button:active {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+
+.fc .fc-button-group {
+  gap: 1px;
+}
+
+.fc .fc-button-group > .fc-button {
+  border-radius: 0;
+}
+
+.fc .fc-button-group > .fc-button:first-child {
+  border-radius: calc(var(--radius) - 2px) 0 0 calc(var(--radius) - 2px);
+}
+
+.fc .fc-button-group > .fc-button:last-child {
+  border-radius: 0 calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0;
+}
+
+/* Header */
+.fc .fc-col-header-cell {
+  padding: 0.5rem 0;
+  font-weight: 500;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  background-color: var(--muted);
+}
+
+/* Day cells */
+.fc .fc-daygrid-day-number {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+}
+
+.fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: 9999px;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.25rem;
+}
+
+/* Events */
+.fc .fc-event {
+  border-radius: calc(var(--radius) - 4px);
+  padding: 1px 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  border: none;
+  border-left: 3px solid;
+}
+
+.fc .fc-daygrid-event {
+  margin: 1px 2px;
+}
+
+.fc .fc-timegrid-event {
+  border-radius: calc(var(--radius) - 4px);
+}
+
+.fc .fc-event-title {
+  font-weight: 500;
+}
+
+.fc .fc-event-time {
+  font-size: 0.6875rem;
+  opacity: 0.8;
+}
+
+/* Time grid */
+.fc .fc-timegrid-slot-label {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.fc .fc-timegrid-axis {
+  padding: 0 0.5rem;
+}
+
+/* List view */
+.fc .fc-list-event:hover td {
+  background-color: var(--accent);
+}
+
+.fc .fc-list-day-cushion {
+  background-color: var(--muted);
+}
+
+/* Scrollbar (for time grid) */
+.fc .fc-scroller::-webkit-scrollbar {
+  width: 6px;
+}
+
+.fc .fc-scroller::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 3px;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .fc .fc-toolbar {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .fc .fc-toolbar-title {
+    font-size: 1rem;
+  }
+
+  .fc .fc-button {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .fc .fc-daygrid-day-number {
+    font-size: 0.75rem;
+  }
+}
