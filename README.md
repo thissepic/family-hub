@@ -289,6 +289,10 @@ Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for 
 
 For security issues, see [SECURITY.md](./SECURITY.md).
 
+## Disclaimer
+
+This software is provided "as is", without warranty of any kind. The authors and contributors are not liable for any damages arising from the use of this software. Use it at your own risk. See [Section 15 and 16 of the AGPL-3.0 license](./LICENSE) for the full legal terms.
+
 ## License
 
 This project is licensed under the [GNU Affero General Public License v3.0](./LICENSE). See the [LICENSE](./LICENSE) file for details.
