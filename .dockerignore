@@ -9,5 +9,4 @@ backups/
 .github/
 .vscode/
 .idea/
-scripts/
 *.md
