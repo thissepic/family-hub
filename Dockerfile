@@ -23,15 +23,12 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY docker-entrypoint.sh ./
 
 RUN mkdir -p /app/uploads /app/backups && chown -R nextjs:nodejs /app/uploads /app/backups
 
 USER nextjs
 EXPOSE 3000 3001
 
-CMD ["sh", "docker-entrypoint.sh"]
+CMD ["node", "server.js"]

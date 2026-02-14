@@ -1,4 +1,15 @@
 services:
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    depends_on:
+      db:
+        condition: service_started
+    environment:
+      DATABASE_URL: "postgresql://familyhub:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/familyhub?schema=public"
+    restart: "no"
+
   app:
     build: .
     restart: unless-stopped
@@ -7,6 +18,8 @@ services:
         condition: service_started
       redis:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
     env_file: .env
     environment:
       DATABASE_URL: "postgresql://familyhub:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/familyhub?schema=public"
