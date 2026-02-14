@@ -53,14 +53,14 @@ export function LeaderboardPanel({ data }: LeaderboardPanelProps) {
               <span className="text-lg w-7 text-center shrink-0">
                 {idx < 3 ? MEDALS[idx] : `${idx + 1}.`}
               </span>
-              {entry.avatar ? (
-                <span className="text-base shrink-0">{entry.avatar}</span>
-              ) : (
-                <span
-                  className="h-4 w-4 rounded-full shrink-0"
-                  style={{ backgroundColor: entry.color }}
-                />
-              )}
+              <span
+                className="h-5 w-5 rounded-full flex items-center justify-center shrink-0"
+                style={{ backgroundColor: entry.color }}
+              >
+                {entry.avatar ? (
+                  <span className="text-xs leading-none">{entry.avatar}</span>
+                ) : null}
+              </span>
               <span className="flex-1 font-medium text-sm truncate">
                 {entry.name}
               </span>

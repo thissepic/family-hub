@@ -60,13 +60,16 @@ export function Leaderboard({ currentMemberId }: LeaderboardProps) {
           {/* Member */}
           <div className="flex items-center gap-2 min-w-0">
             <div
-              className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0"
-              style={{
-                backgroundColor: entry.member.avatar ? "transparent" : entry.member.color,
-                color: entry.member.avatar ? undefined : "white",
-              }}
+              className="h-7 w-7 rounded-full flex items-center justify-center shrink-0"
+              style={{ backgroundColor: entry.member.color }}
             >
-              {entry.member.avatar || entry.member.name.charAt(0).toUpperCase()}
+              {entry.member.avatar ? (
+                <span className="text-sm leading-none">{entry.member.avatar}</span>
+              ) : (
+                <span className="text-xs font-medium text-white">
+                  {entry.member.name.charAt(0).toUpperCase()}
+                </span>
+              )}
             </div>
             <span className="text-sm font-medium truncate">
               {entry.member.name}
