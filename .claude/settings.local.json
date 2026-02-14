@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --version:*)",
+      "Bash(npm:*)",
+      "Bash(pnpm --version:*)",
+      "Bash(yarn:*)",
+      "Bash(docker:*)",
+      "Bash(git --version)",
+      "Bash(psql:*)",
+      "Bash(redis-cli:*)",
+      "Bash(echo:*)",
+      "Bash(npx create-next-app:*)",
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(open:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(ls:*)",
+      "Bash(npx prisma db seed:*)",
+      "mcp__Desktop_Commander__read_file"
+    ]
+  }
+}
