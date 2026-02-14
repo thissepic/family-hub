@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StepIndicator } from "@/components/setup/step-indicator";
 import { ColorPicker } from "@/components/setup/color-picker";
-import { PartyPopper } from "lucide-react";
+import { PartyPopper, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 
 export function RegisterWizard() {
@@ -37,6 +37,8 @@ export function RegisterWizard() {
   // Registration result
   const [adminMemberId, setAdminMemberId] = useState<string | null>(null);
 
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [error, setError] = useState("");
 
   const STEP_LABELS = [t("stepAccount"), t("stepProfile"), t("stepDone")];
@@ -132,25 +134,47 @@ export function RegisterWizard() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">{t("password")}</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder={t("passwordPlaceholder")}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="new-password"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder={t("passwordPlaceholder")}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="passwordConfirm">{t("passwordConfirm")}</Label>
-                <Input
-                  id="passwordConfirm"
-                  type="password"
-                  placeholder={t("passwordConfirmPlaceholder")}
-                  value={passwordConfirm}
-                  onChange={(e) => setPasswordConfirm(e.target.value)}
-                  autoComplete="new-password"
-                />
+                <div className="relative">
+                  <Input
+                    id="passwordConfirm"
+                    type={showPasswordConfirm ? "text" : "password"}
+                    placeholder={t("passwordConfirmPlaceholder")}
+                    value={passwordConfirm}
+                    onChange={(e) => setPasswordConfirm(e.target.value)}
+                    autoComplete="new-password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showPasswordConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               {password && passwordConfirm && password !== passwordConfirm && (
                 <p className="text-sm text-destructive">{t("passwordMismatch")}</p>

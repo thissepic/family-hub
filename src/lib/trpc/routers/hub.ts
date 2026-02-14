@@ -249,7 +249,7 @@ async function fetchLeaderboard(familyId: string) {
   const profiles = await db.memberXpProfile.findMany({
     where: { member: { familyId } },
     include: {
-      member: { select: { id: true, name: true, color: true } },
+      member: { select: { id: true, name: true, color: true, avatar: true } },
     },
     orderBy: { totalXp: "desc" },
   });
@@ -258,6 +258,7 @@ async function fetchLeaderboard(familyId: string) {
     memberId: p.member.id,
     name: p.member.name,
     color: p.member.color,
+    avatar: p.member.avatar,
     totalXp: p.totalXp,
     level: p.level,
     currentStreak: p.currentStreak,

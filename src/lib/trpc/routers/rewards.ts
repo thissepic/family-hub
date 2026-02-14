@@ -103,7 +103,7 @@ export const rewardsRouter = router({
     const profiles = await db.memberXpProfile.findMany({
       where: { member: { familyId } },
       include: {
-        member: { select: { id: true, name: true, color: true } },
+        member: { select: { id: true, name: true, color: true, avatar: true } },
       },
       orderBy: { totalXp: "desc" },
     });
