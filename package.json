@@ -1,7 +1,12 @@
 {
   "name": "family-hub",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thissepic/family-hub.git"
+  },
   "scripts": {
     "predev": "node scripts/inject-sw-version.mjs",
     "dev": "next dev",

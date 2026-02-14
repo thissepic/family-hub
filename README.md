@@ -86,7 +86,7 @@ Or just **Docker** and **Docker Compose** for production deployment.
 ### 1. Clone and install
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/thissepic/family-hub.git
 cd family-hub
 npm install
 ```
@@ -142,10 +142,10 @@ cp .env.example .env
 Set production values:
 
 ```env
-DOMAIN=familyhub.example.com
+DOMAIN=hub.thisisepic.de
 POSTGRES_PASSWORD=<strong-password>
 SESSION_SECRET=<random-32-chars>
-NEXT_PUBLIC_APP_URL=https://familyhub.example.com
+NEXT_PUBLIC_APP_URL=https://hub.thisisepic.de
 ```
 
 ### 2. Deploy
@@ -283,6 +283,12 @@ Detailed documentation is available in the [`docs/`](./docs/) directory:
 | [Real-Time & Jobs](./docs/realtime-and-jobs.md) | Socket.IO events, BullMQ job schedules, service worker strategy |
 | [Hub Display](./docs/hub-display.md) | Kiosk mode setup, panel configuration, night dimming, rotation |
 
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+For security issues, see [SECURITY.md](./SECURITY.md).
+
 ## License
 
-Private project.
+This project is licensed under the [GNU Affero General Public License v3.0](./LICENSE). See the [LICENSE](./LICENSE) file for details.
