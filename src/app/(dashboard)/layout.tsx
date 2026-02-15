@@ -7,6 +7,7 @@ import { TopNav } from "@/components/layout/top-nav";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { MobileSheet } from "@/components/layout/mobile-sheet";
 import { CommandPalette } from "@/components/search/command-palette";
+import { EmailVerificationBanner } from "@/components/layout/email-verification-banner";
 import { useTRPC } from "@/lib/trpc/client";
 
 export default function DashboardLayout({
@@ -36,6 +37,7 @@ export default function DashboardLayout({
           memberColor={currentMember?.color}
           memberAvatar={currentMember?.avatar}
         />
+        <EmailVerificationBanner />
         <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
           {children}
         </main>

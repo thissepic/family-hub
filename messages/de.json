@@ -44,7 +44,8 @@
     "wrongPin": "Falsche PIN. Bitte versuche es erneut.",
     "welcome": "Willkommen zurück, {name}!",
     "noAccount": "Noch kein Familien-Konto?",
-    "createFamily": "Familie erstellen"
+    "createFamily": "Familie erstellen",
+    "forgotPassword": "Passwort vergessen?"
   },
   "register": {
     "title": "Familie erstellen",
@@ -80,6 +81,7 @@
     "registrationFailed": "Registrierung fehlgeschlagen. Bitte versuche es erneut.",
     "completeTitle": "Willkommen bei Family Hub!",
     "completeDescription": "Deine Familie wurde erstellt. Du kannst weitere Mitglieder später in den Einstellungen hinzufügen.",
+    "verificationEmailSent": "Wir haben dir eine Bestätigungsmail gesendet. Bitte prüfe dein Postfach und klicke auf den Link, um deine E-Mail-Adresse zu verifizieren.",
     "loggingIn": "Anmelden...",
     "goToDashboard": "Zum Dashboard",
     "alreadyHaveAccount": "Bereits ein Konto?",
@@ -408,13 +410,11 @@
     "familyDeleted": "Familie gelöscht.",
 
     "changePassword": "Passwort ändern",
-    "changePasswordDescription": "Aktualisiere das Passwort für die Anmeldung an deinem Familien-Konto.",
-    "currentPassword": "Aktuelles Passwort",
-    "newPassword": "Neues Passwort",
-    "confirmNewPassword": "Neues Passwort bestätigen",
-    "passwordChanged": "Passwort erfolgreich geändert.",
-    "passwordMismatch": "Die neuen Passwörter stimmen nicht überein.",
-    "passwordTooShort": "Das Passwort muss mindestens 8 Zeichen lang sein.",
+    "changePasswordEmailDescription": "Um dein Passwort zu ändern, senden wir einen Reset-Link an deine registrierte E-Mail-Adresse.",
+    "changePasswordEmailHint": "Klicke auf den Button, um eine E-Mail zum Zurücksetzen des Passworts zu erhalten. Der Link in der E-Mail ermöglicht es dir, ein neues Passwort festzulegen.",
+    "requestPasswordReset": "Passwort-Reset-E-Mail senden",
+    "passwordResetSent": "Passwort-Reset-E-Mail gesendet! Prüfe dein Postfach.",
+    "passwordResetSentButton": "E-Mail gesendet ✓",
 
     "changeEmail": "E-Mail ändern",
     "changeEmailDescription": "Aktualisiere die E-Mail-Adresse für die Anmeldung an deinem Familien-Konto.",
@@ -422,8 +422,8 @@
     "newEmail": "Neue E-Mail",
     "verifyPassword": "Passwort",
     "verifyPasswordDescription": "Gib dein aktuelles Passwort ein, um diese Änderung zu bestätigen.",
-    "emailChanged": "E-Mail erfolgreich geändert. Die neue E-Mail wird bei der nächsten Anmeldung verwendet.",
-    "emailChangedNote": "Deine neue E-Mail-Adresse muss noch verifiziert werden."
+    "emailChangedSuccess": "E-Mail geändert! Eine Benachrichtigung wurde an deine alte Adresse und ein Bestätigungslink an deine neue Adresse gesendet.",
+    "emailChangeNotice": "Nach der E-Mail-Änderung wird eine Benachrichtigung an deine alte Adresse und ein Bestätigungslink an die neue Adresse gesendet."
   },
   "tasks": {
     "title": "Aufgaben",
@@ -1104,5 +1104,48 @@
     "reconnecting": "Verbindung wird wiederhergestellt...",
     "invalidToken": "Ungültiger oder abgelaufener Zugangstoken",
     "openHub": "Hub-Anzeige öffnen"
+  },
+  "emailVerification": {
+    "bannerText": "Deine E-Mail-Adresse wurde noch nicht verifiziert. Bitte prüfe dein Postfach.",
+    "bannerResend": "Erneut senden",
+    "bannerResent": "Gesendet ✓",
+    "bannerDismiss": "Ausblenden",
+    "verifyingTitle": "E-Mail wird verifiziert...",
+    "verifyingDescription": "Bitte warte, während wir deine E-Mail-Adresse verifizieren.",
+    "successTitle": "E-Mail verifiziert!",
+    "successDescription": "Deine E-Mail-Adresse wurde erfolgreich verifiziert. Du kannst jetzt alle Funktionen nutzen.",
+    "errorTitle": "Verifizierung fehlgeschlagen",
+    "errorDescription": "Der Bestätigungslink ist ungültig oder abgelaufen.",
+    "resendLink": "Neue Bestätigungsmail anfordern",
+    "goToDashboard": "Zum Dashboard",
+    "goToLogin": "Zur Anmeldung"
+  },
+  "passwordReset": {
+    "forgotTitle": "Passwort vergessen",
+    "forgotDescription": "Gib deine E-Mail-Adresse ein und wir senden dir einen Link zum Zurücksetzen deines Passworts.",
+    "emailLabel": "E-Mail-Adresse",
+    "emailPlaceholder": "deine@email.de",
+    "sendResetLink": "Reset-Link senden",
+    "sending": "Wird gesendet...",
+    "sentTitle": "E-Mail prüfen",
+    "sentDescription": "Falls ein Konto mit dieser E-Mail-Adresse existiert, haben wir dir einen Link zum Zurücksetzen gesendet. Bitte prüfe dein Postfach.",
+    "backToLogin": "Zurück zur Anmeldung",
+    "resetTitle": "Passwort zurücksetzen",
+    "resetDescription": "Gib unten dein neues Passwort ein.",
+    "newPassword": "Neues Passwort",
+    "newPasswordPlaceholder": "Mindestens 8 Zeichen",
+    "confirmPassword": "Neues Passwort bestätigen",
+    "confirmPasswordPlaceholder": "Passwort erneut eingeben",
+    "resetButton": "Passwort zurücksetzen",
+    "resetting": "Wird zurückgesetzt...",
+    "passwordMismatch": "Passwörter stimmen nicht überein.",
+    "passwordTooShort": "Passwort muss mindestens 8 Zeichen lang sein.",
+    "successTitle": "Passwort zurückgesetzt!",
+    "successDescription": "Dein Passwort wurde erfolgreich zurückgesetzt. Du kannst dich jetzt mit deinem neuen Passwort anmelden.",
+    "errorTitle": "Zurücksetzen fehlgeschlagen",
+    "errorDescription": "Der Reset-Link ist ungültig oder abgelaufen.",
+    "requestNewLink": "Neuen Reset-Link anfordern",
+    "noToken": "Kein Reset-Token vorhanden. Bitte verwende den Link aus deiner E-Mail.",
+    "goToLogin": "Zur Anmeldung"
   }
 }

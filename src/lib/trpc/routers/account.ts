@@ -3,8 +3,24 @@ import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, accountProcedure, adminProcedure } from "../init";
 import { db } from "@/lib/db";
 import { setAccountSession, getRequestMeta } from "@/lib/auth";
-import { checkLoginRateLimit, checkAccountLockout, recordFailedLogin, resetLoginCounters } from "@/lib/rate-limit";
+import {
+  checkLoginRateLimit,
+  checkAccountLockout,
+  recordFailedLogin,
+  resetLoginCounters,
+  checkPasswordResetRateLimit,
+  checkVerificationResendRateLimit,
+} from "@/lib/rate-limit";
+import { createEmailToken, validateEmailToken } from "@/lib/email/tokens";
+import {
+  enqueueVerificationEmail,
+  enqueuePasswordResetEmail,
+  enqueueEmailChangeNotification,
+  enqueueEmailChangeVerification,
+} from "@/lib/email/queue";
 import bcrypt from "bcryptjs";
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export const accountRouter = router({
   /** Account login with email + password (Layer 1). */
@@ -123,39 +139,159 @@ export const accountRouter = router({
     };
   }),
 
-  /** Change account password (admin only). */
-  changePassword: adminProcedure
-    .input(z.object({
-      currentPassword: z.string().min(1),
-      newPassword: z.string().min(8).max(128),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const family = await db.family.findUnique({
-        where: { id: ctx.session.familyId },
-      });
+  /** Request a password reset email (public, from login page "forgot password"). */
+  requestPasswordReset: publicProcedure
+    .input(z.object({ email: z.string().email() }))
+    .mutation(async ({ input }) => {
+      const email = input.email.toLowerCase();
 
-      if (!family) {
-        throw new TRPCError({ code: "NOT_FOUND" });
+      try {
+        await checkPasswordResetRateLimit(email);
+      } catch {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many reset requests. Please try again later.",
+        });
       }
 
-      const valid = await bcrypt.compare(input.currentPassword, family.passwordHash);
-      if (!valid) {
+      // Always return success to prevent email enumeration
+      const family = await db.family.findUnique({ where: { email } });
+      if (!family) {
+        return { success: true };
+      }
+
+      const rawToken = await createEmailToken(family.id, "PASSWORD_RESET");
+      const resetUrl = `${APP_URL}/reset-password?token=${rawToken}`;
+
+      await enqueuePasswordResetEmail(email, family.defaultLocale, family.name, resetUrl);
+
+      return { success: true };
+    }),
+
+  /** Reset password using a token from email. */
+  resetPassword: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      newPassword: z.string().min(8).max(128),
+    }))
+    .mutation(async ({ input }) => {
+      let tokenRecord;
+      try {
+        tokenRecord = await validateEmailToken(input.token, "PASSWORD_RESET");
+      } catch {
         throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Current password is incorrect",
+          code: "BAD_REQUEST",
+          message: "Invalid or expired reset link.",
         });
       }
 
       const newHash = await bcrypt.hash(input.newPassword, 10);
-      await db.family.update({
-        where: { id: ctx.session.familyId },
-        data: { passwordHash: newHash },
+
+      await db.$transaction(async (tx) => {
+        await tx.family.update({
+          where: { id: tokenRecord.familyId },
+          data: { passwordHash: newHash },
+        });
+
+        await tx.emailToken.update({
+          where: { id: tokenRecord.id },
+          data: { usedAt: new Date() },
+        });
+
+        // Invalidate all sessions to force re-login with new password
+        await tx.activeSession.deleteMany({
+          where: { familyId: tokenRecord.familyId },
+        });
       });
 
       return { success: true };
     }),
 
-  /** Change account email (admin only). */
+  /** Verify email address using a token (handles both VERIFICATION and EMAIL_CHANGE). */
+  verifyEmail: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .mutation(async ({ input }) => {
+      let tokenRecord;
+
+      // Try VERIFICATION first, then EMAIL_CHANGE
+      try {
+        tokenRecord = await validateEmailToken(input.token, "VERIFICATION");
+      } catch {
+        try {
+          tokenRecord = await validateEmailToken(input.token, "EMAIL_CHANGE");
+        } catch {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid or expired verification link.",
+          });
+        }
+      }
+
+      await db.$transaction(async (tx) => {
+        await tx.family.update({
+          where: { id: tokenRecord.familyId },
+          data: { emailVerified: true },
+        });
+
+        await tx.emailToken.update({
+          where: { id: tokenRecord.id },
+          data: { usedAt: new Date() },
+        });
+      });
+
+      return { success: true };
+    }),
+
+  /** Resend verification email (requires account-level auth). */
+  resendVerification: accountProcedure.mutation(async ({ ctx }) => {
+    try {
+      await checkVerificationResendRateLimit(ctx.session.familyId);
+    } catch {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many resend requests. Please try again later.",
+      });
+    }
+
+    const family = await db.family.findUnique({
+      where: { id: ctx.session.familyId },
+    });
+
+    if (!family) {
+      throw new TRPCError({ code: "NOT_FOUND" });
+    }
+
+    if (family.emailVerified) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Email is already verified." });
+    }
+
+    const rawToken = await createEmailToken(family.id, "VERIFICATION");
+    const verifyUrl = `${APP_URL}/verify-email?token=${rawToken}`;
+
+    await enqueueVerificationEmail(family.email, family.defaultLocale, family.name, verifyUrl);
+
+    return { success: true };
+  }),
+
+  /** Request password change email from settings (admin only). */
+  requestPasswordChange: adminProcedure.mutation(async ({ ctx }) => {
+    const family = await db.family.findUnique({
+      where: { id: ctx.session.familyId },
+    });
+
+    if (!family) {
+      throw new TRPCError({ code: "NOT_FOUND" });
+    }
+
+    const rawToken = await createEmailToken(family.id, "PASSWORD_RESET");
+    const resetUrl = `${APP_URL}/reset-password?token=${rawToken}`;
+
+    await enqueuePasswordResetEmail(family.email, family.defaultLocale, family.name, resetUrl);
+
+    return { success: true };
+  }),
+
+  /** Change account email (admin only). Sends notification to old + verification to new. */
   changeEmail: adminProcedure
     .input(z.object({
       newEmail: z.string().email(),
@@ -179,9 +315,11 @@ export const accountRouter = router({
         });
       }
 
+      const newEmail = input.newEmail.toLowerCase();
+
       // Check email not already taken
       const existing = await db.family.findUnique({
-        where: { email: input.newEmail.toLowerCase() },
+        where: { email: newEmail },
       });
       if (existing) {
         throw new TRPCError({
@@ -190,13 +328,23 @@ export const accountRouter = router({
         });
       }
 
+      const oldEmail = family.email;
+
       await db.family.update({
         where: { id: ctx.session.familyId },
         data: {
-          email: input.newEmail.toLowerCase(),
+          email: newEmail,
           emailVerified: false,
         },
       });
+
+      // Notify old email about the change
+      await enqueueEmailChangeNotification(oldEmail, newEmail, family.name, family.defaultLocale);
+
+      // Send verification to new email
+      const rawToken = await createEmailToken(ctx.session.familyId, "EMAIL_CHANGE", { newEmail });
+      const verifyUrl = `${APP_URL}/verify-email?token=${rawToken}`;
+      await enqueueEmailChangeVerification(newEmail, family.defaultLocale, family.name, verifyUrl);
 
       return { success: true };
     }),

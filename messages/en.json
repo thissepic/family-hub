@@ -44,7 +44,8 @@
     "wrongPin": "Incorrect PIN. Please try again.",
     "welcome": "Welcome back, {name}!",
     "noAccount": "No family account yet?",
-    "createFamily": "Create a Family"
+    "createFamily": "Create a Family",
+    "forgotPassword": "Forgot password?"
   },
   "register": {
     "title": "Create Your Family",
@@ -80,6 +81,7 @@
     "registrationFailed": "Registration failed. Please try again.",
     "completeTitle": "Welcome to Family Hub!",
     "completeDescription": "Your family has been created. You can add more members later in the settings.",
+    "verificationEmailSent": "We've sent a verification email to your address. Please check your inbox and click the link to verify your email.",
     "loggingIn": "Logging in...",
     "goToDashboard": "Go to Dashboard",
     "alreadyHaveAccount": "Already have an account?",
@@ -408,13 +410,11 @@
     "familyDeleted": "Family deleted.",
 
     "changePassword": "Change Password",
-    "changePasswordDescription": "Update the password used to sign in to your family account.",
-    "currentPassword": "Current Password",
-    "newPassword": "New Password",
-    "confirmNewPassword": "Confirm New Password",
-    "passwordChanged": "Password changed successfully.",
-    "passwordMismatch": "New passwords do not match.",
-    "passwordTooShort": "Password must be at least 8 characters.",
+    "changePasswordEmailDescription": "To change your password, we'll send a reset link to your registered email address.",
+    "changePasswordEmailHint": "Click the button below to receive a password reset email. The link in the email will allow you to set a new password.",
+    "requestPasswordReset": "Send Password Reset Email",
+    "passwordResetSent": "Password reset email sent! Check your inbox.",
+    "passwordResetSentButton": "Email sent ✓",
 
     "changeEmail": "Change Email",
     "changeEmailDescription": "Update the email address used to sign in to your family account.",
@@ -422,8 +422,8 @@
     "newEmail": "New Email",
     "verifyPassword": "Password",
     "verifyPasswordDescription": "Enter your current password to confirm this change.",
-    "emailChanged": "Email changed successfully. The new email will be used for your next login.",
-    "emailChangedNote": "Your new email address will need to be verified."
+    "emailChangedSuccess": "Email changed! A notification was sent to your old address and a verification link to your new address.",
+    "emailChangeNotice": "After changing your email, a notification will be sent to your old address and a verification link to the new address."
   },
   "tasks": {
     "title": "Tasks",
@@ -1104,5 +1104,48 @@
     "reconnecting": "Reconnecting...",
     "invalidToken": "Invalid or expired access token",
     "openHub": "Open Hub Display"
+  },
+  "emailVerification": {
+    "bannerText": "Your email address has not been verified yet. Please check your inbox.",
+    "bannerResend": "Resend",
+    "bannerResent": "Sent ✓",
+    "bannerDismiss": "Dismiss",
+    "verifyingTitle": "Verifying your email...",
+    "verifyingDescription": "Please wait while we verify your email address.",
+    "successTitle": "Email Verified!",
+    "successDescription": "Your email address has been successfully verified. You can now use all features.",
+    "errorTitle": "Verification Failed",
+    "errorDescription": "The verification link is invalid or has expired.",
+    "resendLink": "Request a new verification email",
+    "goToDashboard": "Go to Dashboard",
+    "goToLogin": "Go to Login"
+  },
+  "passwordReset": {
+    "forgotTitle": "Forgot Password",
+    "forgotDescription": "Enter your email address and we'll send you a link to reset your password.",
+    "emailLabel": "Email Address",
+    "emailPlaceholder": "your@email.com",
+    "sendResetLink": "Send Reset Link",
+    "sending": "Sending...",
+    "sentTitle": "Check Your Email",
+    "sentDescription": "If an account exists with that email address, we've sent a password reset link. Please check your inbox.",
+    "backToLogin": "Back to Login",
+    "resetTitle": "Reset Password",
+    "resetDescription": "Enter your new password below.",
+    "newPassword": "New Password",
+    "newPasswordPlaceholder": "At least 8 characters",
+    "confirmPassword": "Confirm New Password",
+    "confirmPasswordPlaceholder": "Enter password again",
+    "resetButton": "Reset Password",
+    "resetting": "Resetting...",
+    "passwordMismatch": "Passwords do not match.",
+    "passwordTooShort": "Password must be at least 8 characters.",
+    "successTitle": "Password Reset!",
+    "successDescription": "Your password has been successfully reset. You can now log in with your new password.",
+    "errorTitle": "Reset Failed",
+    "errorDescription": "The reset link is invalid or has expired.",
+    "requestNewLink": "Request a new reset link",
+    "noToken": "No reset token provided. Please use the link from your email.",
+    "goToLogin": "Go to Login"
   }
 }

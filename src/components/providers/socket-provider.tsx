@@ -35,6 +35,9 @@ export function SocketProvider({ children }: SocketProviderProps) {
       path: "/socket.io/",
       transports: ["websocket", "polling"],
       query: { familyId: session.familyId },
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
     });
 
     setSocket(s);

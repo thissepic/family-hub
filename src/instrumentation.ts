@@ -7,10 +7,12 @@ export async function register() {
     const { startMaintenanceWorker } = await import(
       "@/lib/maintenance/bootstrap"
     );
+    const { startEmailWorker } = await import("@/lib/email/bootstrap");
     const { initSocketServer } = await import("@/lib/socket/server");
 
     await startSyncWorker();
     await startMaintenanceWorker();
+    await startEmailWorker();
     initSocketServer();
   }
 }

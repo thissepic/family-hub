@@ -4,7 +4,11 @@ import { router, publicProcedure, protectedProcedure, adminProcedure } from "../
 import { db } from "@/lib/db";
 import { clearSession, setAccountSession, getRequestMeta } from "@/lib/auth";
 import { checkRegistrationRateLimit } from "@/lib/rate-limit";
+import { createEmailToken } from "@/lib/email/tokens";
+import { enqueueVerificationEmail } from "@/lib/email/queue";
 import bcrypt from "bcryptjs";
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export const familyRouter = router({
   get: protectedProcedure.query(async ({ ctx }) => {
@@ -89,6 +93,16 @@ export const familyRouter = router({
       });
 
       await setAccountSession(result.familyId, false);
+
+      // Send verification email
+      try {
+        const rawToken = await createEmailToken(result.familyId, "VERIFICATION");
+        const verifyUrl = `${APP_URL}/verify-email?token=${rawToken}`;
+        await enqueueVerificationEmail(email, input.defaultLocale, input.familyName, verifyUrl);
+      } catch (err) {
+        // Don't fail registration if email sending fails
+        console.warn("[Registration] Failed to enqueue verification email:", err);
+      }
 
       return {
         success: true as const,

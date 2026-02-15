@@ -135,6 +135,29 @@ async function handleWeeklyRecap() {
   console.log(`[Maintenance] Weekly recap generated for ${families.length} families`);
 }
 
+async function handleCleanupExpiredTokens() {
+  const now = new Date();
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  // Delete expired tokens
+  const expired = await db.emailToken.deleteMany({
+    where: { expiresAt: { lt: now } },
+  });
+
+  // Delete used tokens older than 7 days
+  const used = await db.emailToken.deleteMany({
+    where: {
+      usedAt: { not: null, lt: sevenDaysAgo },
+    },
+  });
+
+  console.log(
+    `[Maintenance] Token cleanup: ${expired.count} expired, ${used.count} old used tokens removed`
+  );
+  return { expired: expired.count, used: used.count };
+}
+
 async function handleDailyBackup() {
   const backupDir = process.env.BACKUP_DIR || "./backups";
   const retentionDays = parseInt(process.env.BACKUP_RETENTION_DAYS || "7", 10);
@@ -182,6 +205,8 @@ export function createMaintenanceWorker(): Worker {
           return handleCleanupNotifications();
         case "weekly-recap":
           return handleWeeklyRecap();
+        case "cleanup-expired-tokens":
+          return handleCleanupExpiredTokens();
         case "daily-backup":
           return handleDailyBackup();
         default:

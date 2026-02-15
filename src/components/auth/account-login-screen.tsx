@@ -97,15 +97,20 @@ export function AccountLoginScreen() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="rememberMe"
-                checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(checked === true)}
-              />
-              <Label htmlFor="rememberMe" className="text-sm font-normal cursor-pointer">
-                {t("rememberMe")}
-              </Label>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="rememberMe"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(checked === true)}
+                />
+                <Label htmlFor="rememberMe" className="text-sm font-normal cursor-pointer">
+                  {t("rememberMe")}
+                </Label>
+              </div>
+              <Link href="/forgot-password" className="text-sm text-primary hover:underline">
+                {t("forgotPassword")}
+              </Link>
             </div>
 
             {error && (

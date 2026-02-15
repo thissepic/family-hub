@@ -4,6 +4,7 @@ import { unsealData } from "iron-session";
 
 const PUBLIC_PATHS = ["/setup", "/hub", "/api", "/_next", "/favicon.ico", "/manifest.json", "/sw.js", "/offline", "/icons"];
 const AUTH_PATHS = ["/login", "/register"];
+const TOKEN_PATHS = ["/verify-email", "/reset-password", "/forgot-password"];
 const ACCOUNT_PATHS = ["/profiles"];
 
 interface UnsealedSession {
@@ -39,6 +40,11 @@ export async function proxy(request: NextRequest) {
     } catch {
       // Invalid cookie
     }
+  }
+
+  // Token-based paths (verify-email, reset-password, forgot-password): always accessible
+  if (TOKEN_PATHS.some((path) => pathname.startsWith(path))) {
+    return NextResponse.next();
   }
 
   // Auth paths (login/register): redirect logged-in users away

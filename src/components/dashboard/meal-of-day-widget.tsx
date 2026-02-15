@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { UtensilsCrossed } from "lucide-react";
@@ -23,13 +24,15 @@ export function MealOfDayWidget() {
   const tMeals = useTranslations("meals");
   const trpc = useTRPC();
 
-  const weekStart = getWeekStart();
+  // Memoize so the query key stays stable across re-renders
+  const weekStart = useMemo(() => getWeekStart(), []);
 
   const { data: meals, isLoading } = useQuery(
     trpc.meals.getWeekPlan.queryOptions({ weekStart })
   );
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  // Memoize today string to avoid unnecessary re-computations
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
   const todayMeals = meals?.filter((m) => {
     const mealDate = new Date(m.date).toISOString().split("T")[0];
     return mealDate === todayStr;

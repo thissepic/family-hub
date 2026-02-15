@@ -15,25 +15,74 @@ const PRECACHE_URLS = [
   "/manifest.json",
 ];
 
+// ─── Helpers ───────────────────────────────────────────────────
+
+/**
+ * Fetch with abort-signal forwarding and a network timeout.
+ * Prevents indefinite hangs when the network or server is unresponsive.
+ */
+function fetchWithTimeout(request, timeoutMs = 10000) {
+  const controller = new AbortController();
+
+  // Forward the original request's abort signal so that browser-initiated
+  // aborts (e.g. during a hard reload) propagate to our fetch.
+  if (request.signal) {
+    if (request.signal.aborted) {
+      controller.abort();
+    } else {
+      request.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+  }
+
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  return fetch(request, { signal: controller.signal }).finally(() =>
+    clearTimeout(timeout)
+  );
+}
+
+// ─── Activation guard ──────────────────────────────────────────
+
+// While the SW is activating (cleaning up old caches), we let all fetch
+// requests fall through to the network to avoid serving from a
+// half-cleared cache.
+let isActivating = false;
+
 // ─── Install ──────────────────────────────────────────────────
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
   );
-  // Activate immediately — don't wait for old tabs to close
-  self.skipWaiting();
+  // Do NOT call self.skipWaiting() here — the page will send a
+  // SKIP_WAITING message once it is stable and ready for the takeover.
+});
+
+// ─── Message (skipWaiting on demand) ──────────────────────────
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 // ─── Activate ─────────────────────────────────────────────────
 
 self.addEventListener("activate", (event) => {
+  isActivating = true;
+
   // Delete ALL caches that don't match the current build
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      )
+      .then(() => {
+        isActivating = false;
+      })
   );
+
   // Take control of all open tabs immediately
   self.clients.claim();
 });
@@ -60,11 +109,16 @@ self.addEventListener("fetch", (event) => {
   // API routes: passthrough (no caching for mutations/data)
   if (url.pathname.startsWith("/api/")) return;
 
+  // During activation, let everything go directly to the network
+  // to prevent serving from a half-cleared cache.
+  if (isActivating) return;
+
   // Navigation requests: Network-only, fallback to offline page
-  // This ensures users always get the latest HTML after a deployment
+  // This ensures users always get the latest HTML after a deployment.
+  // Uses a 5s timeout to prevent indefinite loading on slow networks.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/offline"))
+      fetchWithTimeout(request, 5000).catch(() => caches.match("/offline"))
     );
     return;
   }
@@ -75,7 +129,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached;
-        return fetch(request).then((response) => {
+        return fetchWithTimeout(request).then((response) => {
           if (response.ok) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
@@ -90,7 +144,7 @@ self.addEventListener("fetch", (event) => {
   // Everything else (icons, manifest, fonts, etc.): Network-first, cache fallback
   // This avoids serving stale non-hashed assets after a deployment
   event.respondWith(
-    fetch(request)
+    fetchWithTimeout(request)
       .then((response) => {
         if (response.ok) {
           const clone = response.clone();

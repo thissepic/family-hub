@@ -62,10 +62,8 @@ export function FamilySettings() {
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
 
-  // Change Password state
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  // Password reset state
+  const [passwordResetSent, setPasswordResetSent] = useState(false);
 
   // Change Email state
   const [newEmail, setNewEmail] = useState("");
@@ -93,13 +91,12 @@ export function FamilySettings() {
     })
   );
 
-  const changePasswordMutation = useMutation(
-    trpc.account.changePassword.mutationOptions({
+  const requestPasswordChangeMutation = useMutation(
+    trpc.account.requestPasswordChange.mutationOptions({
       onSuccess: () => {
-        toast.success(t("passwordChanged"));
-        setCurrentPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
+        toast.success(t("passwordResetSent"));
+        setPasswordResetSent(true);
+        setTimeout(() => setPasswordResetSent(false), 30000);
       },
       onError: (err) => {
         toast.error(err.message);
@@ -110,7 +107,7 @@ export function FamilySettings() {
   const changeEmailMutation = useMutation(
     trpc.account.changeEmail.mutationOptions({
       onSuccess: () => {
-        toast.success(t("emailChanged"));
+        toast.success(t("emailChangedSuccess"));
         setNewEmail("");
         setEmailPassword("");
         queryClient.invalidateQueries({ queryKey: [["family"]] });
@@ -169,21 +166,6 @@ export function FamilySettings() {
         },
       }
     );
-  };
-
-  const handleChangePassword = () => {
-    if (newPassword !== confirmPassword) {
-      toast.error(t("passwordMismatch"));
-      return;
-    }
-    if (newPassword.length < 8) {
-      toast.error(t("passwordTooShort"));
-      return;
-    }
-    changePasswordMutation.mutate({
-      currentPassword,
-      newPassword,
-    });
   };
 
   const handleChangeEmail = () => {
@@ -339,56 +321,20 @@ export function FamilySettings() {
             <Shield className="h-5 w-5" />
             {t("changePassword")}
           </CardTitle>
-          <CardDescription>{t("changePasswordDescription")}</CardDescription>
+          <CardDescription>{t("changePasswordEmailDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="current-password">{t("currentPassword")}</Label>
-            <Input
-              id="current-password"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="********"
-              className="max-w-sm"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-password">{t("newPassword")}</Label>
-            <Input
-              id="new-password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="********"
-              className="max-w-sm"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirm-password">{t("confirmNewPassword")}</Label>
-            <Input
-              id="confirm-password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="********"
-              className="max-w-sm"
-            />
-          </div>
+          <p className="text-sm text-muted-foreground">
+            {t("changePasswordEmailHint")}
+          </p>
           <Button
-            onClick={handleChangePassword}
-            disabled={
-              changePasswordMutation.isPending ||
-              !currentPassword ||
-              !newPassword ||
-              newPassword.length < 8 ||
-              !confirmPassword
-            }
+            onClick={() => requestPasswordChangeMutation.mutate()}
+            disabled={requestPasswordChangeMutation.isPending || passwordResetSent}
           >
-            {changePasswordMutation.isPending && (
+            {requestPasswordChangeMutation.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            {t("changePassword")}
+            {passwordResetSent ? t("passwordResetSentButton") : t("requestPasswordReset")}
           </Button>
         </CardContent>
       </Card>
@@ -446,7 +392,7 @@ export function FamilySettings() {
             {t("changeEmail")}
           </Button>
           <p className="text-xs text-muted-foreground">
-            {t("emailChangedNote")}
+            {t("emailChangeNotice")}
           </p>
         </CardContent>
       </Card>

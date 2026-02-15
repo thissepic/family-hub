@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { Calendar, Clock } from "lucide-react";
@@ -12,9 +13,15 @@ export function TodayCalendarWidget() {
   const t = useTranslations("dashboard");
   const trpc = useTRPC();
 
-  const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+  // Memoize date range to prevent unstable query keys on every render.
+  // Only recompute when the calendar date actually changes.
+  const { start, end } = useMemo(() => {
+    const today = new Date();
+    return {
+      start: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+      end: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59),
+    };
+  }, []);
 
   const { data: events, isLoading } = useQuery(
     trpc.calendar.list.queryOptions({ start, end })

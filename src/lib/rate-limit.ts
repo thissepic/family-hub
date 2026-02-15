@@ -30,12 +30,18 @@ const REGISTER_MAX_ATTEMPTS = parseInt(process.env.RATE_LIMIT_REGISTER_ATTEMPTS 
 const REGISTER_WINDOW_SEC = parseInt(process.env.RATE_LIMIT_REGISTER_WINDOW || "3600", 10); // 1 hour
 const PIN_MAX_ATTEMPTS = 5;
 const PIN_WINDOW_SEC = 900; // 15 min lockout after 5 failed PIN attempts
+const PASSWORD_RESET_MAX = 3;
+const PASSWORD_RESET_WINDOW_SEC = 3600; // 1 hour
+const VERIFICATION_RESEND_MAX = 3;
+const VERIFICATION_RESEND_WINDOW_SEC = 3600; // 1 hour
 
 let loginLimiter: RateLimiterAbstract | null = null;
 let accountLockoutLimiter: RateLimiterAbstract | null = null;
 let apiLimiter: RateLimiterAbstract | null = null;
 let registrationLimiter: RateLimiterAbstract | null = null;
 let pinLimiter: RateLimiterAbstract | null = null;
+let passwordResetLimiter: RateLimiterAbstract | null = null;
+let verificationResendLimiter: RateLimiterAbstract | null = null;
 
 function getLoginLimiter(): RateLimiterAbstract {
   if (loginLimiter) return loginLimiter;
@@ -142,6 +148,48 @@ function getPinLimiter(): RateLimiterAbstract {
   return pinLimiter;
 }
 
+function getPasswordResetLimiter(): RateLimiterAbstract {
+  if (passwordResetLimiter) return passwordResetLimiter;
+  const redis = getRedis();
+
+  if (redis) {
+    passwordResetLimiter = new RateLimiterRedis({
+      storeClient: redis,
+      keyPrefix: "rl:pwreset:email",
+      points: PASSWORD_RESET_MAX,
+      duration: PASSWORD_RESET_WINDOW_SEC,
+    });
+  } else {
+    passwordResetLimiter = new RateLimiterMemory({
+      keyPrefix: "rl:pwreset:email",
+      points: PASSWORD_RESET_MAX,
+      duration: PASSWORD_RESET_WINDOW_SEC,
+    });
+  }
+  return passwordResetLimiter;
+}
+
+function getVerificationResendLimiter(): RateLimiterAbstract {
+  if (verificationResendLimiter) return verificationResendLimiter;
+  const redis = getRedis();
+
+  if (redis) {
+    verificationResendLimiter = new RateLimiterRedis({
+      storeClient: redis,
+      keyPrefix: "rl:verify:resend",
+      points: VERIFICATION_RESEND_MAX,
+      duration: VERIFICATION_RESEND_WINDOW_SEC,
+    });
+  } else {
+    verificationResendLimiter = new RateLimiterMemory({
+      keyPrefix: "rl:verify:resend",
+      points: VERIFICATION_RESEND_MAX,
+      duration: VERIFICATION_RESEND_WINDOW_SEC,
+    });
+  }
+  return verificationResendLimiter;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /** Check if IP is rate-limited for login attempts. Throws if blocked. */
@@ -218,5 +266,23 @@ export async function resetPinRateLimit(key: string): Promise<void> {
     await getPinLimiter().delete(key);
   } catch {
     // Non-critical, ignore
+  }
+}
+
+/** Check rate limit for password reset requests. Throws if blocked. */
+export async function checkPasswordResetRateLimit(email: string): Promise<void> {
+  try {
+    await getPasswordResetLimiter().consume(email);
+  } catch {
+    throw new Error("TOO_MANY_REQUESTS");
+  }
+}
+
+/** Check rate limit for verification email resend. Throws if blocked. */
+export async function checkVerificationResendRateLimit(familyId: string): Promise<void> {
+  try {
+    await getVerificationResendLimiter().consume(familyId);
+  } catch {
+    throw new Error("TOO_MANY_REQUESTS");
   }
 }

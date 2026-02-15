@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StepIndicator } from "@/components/setup/step-indicator";
 import { ColorPicker } from "@/components/setup/color-picker";
-import { PartyPopper, Eye, EyeOff } from "lucide-react";
+import { PartyPopper, Eye, EyeOff, Mail } from "lucide-react";
 import Link from "next/link";
 
 export function RegisterWizard() {
@@ -322,6 +322,12 @@ export function RegisterWizard() {
               <PartyPopper className="h-16 w-16 mx-auto text-primary" />
               <h2 className="text-2xl font-bold">{t("completeTitle")}</h2>
               <p className="text-muted-foreground">{t("completeDescription")}</p>
+              <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3 text-left">
+                <Mail className="h-5 w-5 text-muted-foreground shrink-0" />
+                <p className="text-sm text-muted-foreground">
+                  {t("verificationEmailSent")}
+                </p>
+              </div>
               <Button
                 onClick={handleComplete}
                 className="w-full"

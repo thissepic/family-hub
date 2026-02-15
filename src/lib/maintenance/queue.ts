@@ -54,11 +54,18 @@ export async function enqueueMaintenanceJobs(): Promise<void> {
     { repeat: { pattern: "0 18 * * 0" } }
   );
 
-  // Daily database backup — daily at 3:30 AM
+  // Cleanup expired email tokens — daily at 4:00 AM
+  await q.add(
+    "cleanup-expired-tokens",
+    {},
+    { repeat: { pattern: "0 4 * * *" } }
+  );
+
+  // Daily database backup — daily at 4:30 AM
   await q.add(
     "daily-backup",
     {},
-    { repeat: { pattern: "30 3 * * *" } }
+    { repeat: { pattern: "30 4 * * *" } }
   );
 }
 

@@ -5,7 +5,7 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["socket.io", "web-push", "bullmq", "@azure/msal-node"],
+  serverExternalPackages: ["socket.io", "web-push", "bullmq", "@azure/msal-node", "nodemailer"],
   headers: async () => [
     {
       // Ensure browsers always revalidate the Service Worker file
