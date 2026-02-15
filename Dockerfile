@@ -7,9 +7,11 @@ RUN npm ci
 
 # Stage 2: Build
 FROM node:22-alpine AS builder
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN npm install --no-save @parcel/watcher @parcel/watcher-linux-x64-musl
 RUN npx prisma generate
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
