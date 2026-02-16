@@ -265,10 +265,28 @@ export const accountRouter = router({
       throw new TRPCError({ code: "BAD_REQUEST", message: "Email is already verified." });
     }
 
-    const rawToken = await createEmailToken(family.id, "VERIFICATION");
+    let rawToken: string;
+    try {
+      rawToken = await createEmailToken(family.id, "VERIFICATION");
+    } catch (err) {
+      console.error("[resendVerification] Failed to create email token:", err);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to create verification token.",
+      });
+    }
+
     const verifyUrl = `${APP_URL}/verify-email?token=${rawToken}`;
 
-    await enqueueVerificationEmail(family.email, family.defaultLocale, family.name, verifyUrl);
+    try {
+      await enqueueVerificationEmail(family.email, family.defaultLocale, family.name, verifyUrl);
+    } catch (err) {
+      console.error("[resendVerification] Failed to enqueue verification email:", err);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to send verification email. Please try again later.",
+      });
+    }
 
     return { success: true };
   }),

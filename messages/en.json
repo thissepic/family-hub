@@ -1109,6 +1109,7 @@
     "bannerText": "Your email address has not been verified yet. Please check your inbox.",
     "bannerResend": "Resend",
     "bannerResent": "Sent ✓",
+    "bannerError": "Failed to send verification email. Please try again later.",
     "bannerDismiss": "Dismiss",
     "verifyingTitle": "Verifying your email...",
     "verifyingDescription": "Please wait while we verify your email address.",

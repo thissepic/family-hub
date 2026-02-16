@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
-import { X, Mail } from "lucide-react";
+import { X, Mail, AlertCircle } from "lucide-react";
 
 export function EmailVerificationBanner() {
   const t = useTranslations("emailVerification");
@@ -36,14 +36,17 @@ export function EmailVerificationBanner() {
         <div className="flex items-center gap-3 min-w-0">
           <Mail className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <p className="text-sm text-amber-800 dark:text-amber-200 truncate">
-            {t("bannerText")}
+            {resendMutation.isError ? t("bannerError") : t("bannerText")}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => resendMutation.mutate()}
+            onClick={() => {
+              resendMutation.reset();
+              resendMutation.mutate();
+            }}
             disabled={resendMutation.isPending || resent}
             className="text-xs"
           >

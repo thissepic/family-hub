@@ -1109,6 +1109,7 @@
     "bannerText": "Deine E-Mail-Adresse wurde noch nicht verifiziert. Bitte prüfe dein Postfach.",
     "bannerResend": "Erneut senden",
     "bannerResent": "Gesendet ✓",
+    "bannerError": "Fehler beim Senden der Bestätigungsmail. Bitte versuche es später erneut.",
     "bannerDismiss": "Ausblenden",
     "verifyingTitle": "E-Mail wird verifiziert...",
     "verifyingDescription": "Bitte warte, während wir deine E-Mail-Adresse verifizieren.",
