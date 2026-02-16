@@ -139,6 +139,14 @@ enum OAuthProvider {
   MICROSOFT
 }
 
+enum EmailNotificationType {
+  TWO_FACTOR_ENABLED
+  TWO_FACTOR_DISABLED
+  OAUTH_LINKED
+  OAUTH_UNLINKED
+  EMAIL_CHANGE_NOTIFICATION
+}
+
 enum NotificationType {
   CALENDAR_REMINDER
   CHORE_DEADLINE
@@ -215,6 +223,7 @@ model Family {
   emailTokens             EmailToken[]
   twoFactorRecoveryCodes  TwoFactorRecoveryCode[]
   oauthAccounts           OAuthAccount[]
+  emailPreferences        EmailPreference[]
 }
 
 model FamilyMember {
@@ -890,4 +899,16 @@ model OAuthAccount {
   @@unique([provider, providerAccountId])
   @@index([familyId])
   @@index([provider, email])
+}
+
+model EmailPreference {
+  id       String                @id @default(cuid())
+  familyId String
+  type     EmailNotificationType
+  enabled  Boolean               @default(true)
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, type])
+  @@index([familyId])
 }

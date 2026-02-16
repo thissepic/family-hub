@@ -16,6 +16,16 @@ interface EmailChangedNotificationData {
   newEmail: string;
 }
 
+interface TwoFactorEmailData {
+  familyName: string;
+}
+
+interface OAuthAccountEmailData {
+  familyName: string;
+  provider: string;
+  providerEmail: string;
+}
+
 // ─── Translations ──────────────────────────────────────────────────────────
 
 const t: Record<string, Record<Locale, string>> = {
@@ -101,6 +111,76 @@ const t: Record<string, Record<Locale, string>> = {
   changeVerifyBody: {
     en: "Please verify your new email address by clicking the button below.",
     de: "Bitte bestaetige deine neue E-Mail-Adresse, indem du auf den Button klickst.",
+  },
+
+  // 2FA Enabled
+  twoFactorEnabledSubject: {
+    en: "Two-factor authentication enabled",
+    de: "Zwei-Faktor-Authentifizierung aktiviert",
+  },
+  twoFactorEnabledHeading: {
+    en: "2FA Has Been Enabled",
+    de: "2FA wurde aktiviert",
+  },
+  twoFactorEnabledBody: {
+    en: "Two-factor authentication has been enabled on your Family Hub account. You will now need an authenticator app code when signing in.",
+    de: "Zwei-Faktor-Authentifizierung wurde fuer dein Family Hub Konto aktiviert. Du benoetigst jetzt einen Authenticator-App-Code beim Anmelden.",
+  },
+
+  // 2FA Disabled
+  twoFactorDisabledSubject: {
+    en: "Two-factor authentication disabled",
+    de: "Zwei-Faktor-Authentifizierung deaktiviert",
+  },
+  twoFactorDisabledHeading: {
+    en: "2FA Has Been Disabled",
+    de: "2FA wurde deaktiviert",
+  },
+  twoFactorDisabledBody: {
+    en: "Two-factor authentication has been disabled on your Family Hub account. Your account is now protected by password only.",
+    de: "Zwei-Faktor-Authentifizierung wurde fuer dein Family Hub Konto deaktiviert. Dein Konto ist jetzt nur noch durch ein Passwort geschuetzt.",
+  },
+
+  // OAuth Linked
+  oauthLinkedSubject: {
+    en: "New sign-in method linked",
+    de: "Neue Anmeldemethode verknuepft",
+  },
+  oauthLinkedHeading: {
+    en: "Account Linked",
+    de: "Konto verknuepft",
+  },
+  oauthLinkedBody: {
+    en: "A new sign-in method has been linked to your Family Hub account.",
+    de: "Eine neue Anmeldemethode wurde mit deinem Family Hub Konto verknuepft.",
+  },
+  oauthProvider: {
+    en: "Provider:",
+    de: "Anbieter:",
+  },
+  oauthAccount: {
+    en: "Account:",
+    de: "Konto:",
+  },
+
+  // OAuth Unlinked
+  oauthUnlinkedSubject: {
+    en: "Sign-in method removed",
+    de: "Anmeldemethode entfernt",
+  },
+  oauthUnlinkedHeading: {
+    en: "Account Unlinked",
+    de: "Konto entfernt",
+  },
+  oauthUnlinkedBody: {
+    en: "A sign-in method has been removed from your Family Hub account.",
+    de: "Eine Anmeldemethode wurde von deinem Family Hub Konto entfernt.",
+  },
+
+  // Shared security warning
+  securityWarning: {
+    en: "If you did not make this change, please secure your account immediately.",
+    de: "Falls du diese Aenderung nicht vorgenommen hast, sichere bitte umgehend dein Konto.",
   },
 
   // Shared
@@ -222,4 +302,72 @@ export function emailChangeVerification(
   );
 
   return { subject: t.changeVerifySubject[locale], html };
+}
+
+export function twoFactorEnabledEmail(
+  locale: Locale,
+  data: TwoFactorEmailData,
+): { subject: string; html: string } {
+  const html = layout(
+    `<p style="margin:0 0 8px;font-size:15px;color:#18181b;">${t.hi[locale]} <strong>${data.familyName}</strong>,</p>
+     <h2 style="margin:0 0 16px;font-size:18px;color:#18181b;">${t.twoFactorEnabledHeading[locale]}</h2>
+     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">${t.twoFactorEnabledBody[locale]}</p>
+     <p style="font-size:13px;color:#ef4444;font-weight:500;">${t.securityWarning[locale]}</p>`,
+    locale,
+  );
+
+  return { subject: t.twoFactorEnabledSubject[locale], html };
+}
+
+export function twoFactorDisabledEmail(
+  locale: Locale,
+  data: TwoFactorEmailData,
+): { subject: string; html: string } {
+  const html = layout(
+    `<p style="margin:0 0 8px;font-size:15px;color:#18181b;">${t.hi[locale]} <strong>${data.familyName}</strong>,</p>
+     <h2 style="margin:0 0 16px;font-size:18px;color:#18181b;">${t.twoFactorDisabledHeading[locale]}</h2>
+     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">${t.twoFactorDisabledBody[locale]}</p>
+     <p style="font-size:13px;color:#ef4444;font-weight:500;">${t.securityWarning[locale]}</p>`,
+    locale,
+  );
+
+  return { subject: t.twoFactorDisabledSubject[locale], html };
+}
+
+export function oauthLinkedEmail(
+  locale: Locale,
+  data: OAuthAccountEmailData,
+): { subject: string; html: string } {
+  const html = layout(
+    `<p style="margin:0 0 8px;font-size:15px;color:#18181b;">${t.hi[locale]} <strong>${data.familyName}</strong>,</p>
+     <h2 style="margin:0 0 16px;font-size:18px;color:#18181b;">${t.oauthLinkedHeading[locale]}</h2>
+     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">${t.oauthLinkedBody[locale]}</p>
+     <table style="margin:16px 0;font-size:14px;color:#3f3f46;">
+       <tr><td style="padding:4px 12px 4px 0;font-weight:600;">${t.oauthProvider[locale]}</td><td>${data.provider}</td></tr>
+       <tr><td style="padding:4px 12px 4px 0;font-weight:600;">${t.oauthAccount[locale]}</td><td>${data.providerEmail}</td></tr>
+     </table>
+     <p style="font-size:13px;color:#ef4444;font-weight:500;">${t.securityWarning[locale]}</p>`,
+    locale,
+  );
+
+  return { subject: t.oauthLinkedSubject[locale], html };
+}
+
+export function oauthUnlinkedEmail(
+  locale: Locale,
+  data: OAuthAccountEmailData,
+): { subject: string; html: string } {
+  const html = layout(
+    `<p style="margin:0 0 8px;font-size:15px;color:#18181b;">${t.hi[locale]} <strong>${data.familyName}</strong>,</p>
+     <h2 style="margin:0 0 16px;font-size:18px;color:#18181b;">${t.oauthUnlinkedHeading[locale]}</h2>
+     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">${t.oauthUnlinkedBody[locale]}</p>
+     <table style="margin:16px 0;font-size:14px;color:#3f3f46;">
+       <tr><td style="padding:4px 12px 4px 0;font-weight:600;">${t.oauthProvider[locale]}</td><td>${data.provider}</td></tr>
+       <tr><td style="padding:4px 12px 4px 0;font-weight:600;">${t.oauthAccount[locale]}</td><td>${data.providerEmail}</td></tr>
+     </table>
+     <p style="font-size:13px;color:#ef4444;font-weight:500;">${t.securityWarning[locale]}</p>`,
+    locale,
+  );
+
+  return { subject: t.oauthUnlinkedSubject[locale], html };
 }

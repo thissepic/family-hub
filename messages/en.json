@@ -387,6 +387,16 @@
     "notificationType_levelUp": "Level Up",
     "notificationType_adminAnnouncement": "Announcements & Recaps",
 
+    "emailPreferences": "Email Notifications",
+    "emailPreferencesDescription": "Control which security notification emails are sent to your family email address.",
+    "emailPreferenceSaveFailed": "Failed to save email preference.",
+    "emailNotificationType_twoFactorEnabled": "2FA Enabled Notification",
+    "emailNotificationType_twoFactorDisabled": "2FA Disabled Notification",
+    "emailNotificationType_oauthLinked": "Account Linked Notification",
+    "emailNotificationType_oauthUnlinked": "Account Unlinked Notification",
+    "emailNotificationType_emailChangeNotification": "Email Changed Notification",
+    "emailAlwaysSentNote": "Password reset and email verification emails are always sent and cannot be disabled.",
+
     "pushNotifications": "Push Notifications",
     "pushNotificationsDescription": "Receive browser push notifications even when the app is in the background.",
     "enablePush": "Enable Push Notifications",

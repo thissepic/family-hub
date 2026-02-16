@@ -6,12 +6,17 @@ import {
   passwordResetEmail,
   emailChangedNotification,
   emailChangeVerification,
+  twoFactorEnabledEmail,
+  twoFactorDisabledEmail,
+  oauthLinkedEmail,
+  oauthUnlinkedEmail,
 } from "./templates";
 
 type Locale = "en" | "de";
 
 interface EmailJobData {
-  type: "verification" | "password-reset" | "email-change-notification" | "email-change-verification";
+  type: "verification" | "password-reset" | "email-change-notification" | "email-change-verification"
+    | "two-factor-enabled" | "two-factor-disabled" | "oauth-linked" | "oauth-unlinked";
   email: string;
   locale: string;
   familyName: string;
@@ -19,6 +24,8 @@ interface EmailJobData {
   resetUrl?: string;
   oldEmail?: string;
   newEmail?: string;
+  provider?: string;
+  providerEmail?: string;
 }
 
 async function handleSendEmail(job: Job<EmailJobData>) {
@@ -59,6 +66,38 @@ async function handleSendEmail(job: Job<EmailJobData>) {
     }
     case "email-change-verification": {
       const result = emailChangeVerification(locale, { familyName, verifyUrl: job.data.verifyUrl! });
+      subject = result.subject;
+      html = result.html;
+      break;
+    }
+    case "two-factor-enabled": {
+      const result = twoFactorEnabledEmail(locale, { familyName });
+      subject = result.subject;
+      html = result.html;
+      break;
+    }
+    case "two-factor-disabled": {
+      const result = twoFactorDisabledEmail(locale, { familyName });
+      subject = result.subject;
+      html = result.html;
+      break;
+    }
+    case "oauth-linked": {
+      const result = oauthLinkedEmail(locale, {
+        familyName,
+        provider: job.data.provider!,
+        providerEmail: job.data.providerEmail!,
+      });
+      subject = result.subject;
+      html = result.html;
+      break;
+    }
+    case "oauth-unlinked": {
+      const result = oauthUnlinkedEmail(locale, {
+        familyName,
+        provider: job.data.provider!,
+        providerEmail: job.data.providerEmail!,
+      });
       subject = result.subject;
       html = result.html;
       break;

@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ShieldCheck, ShieldOff, Loader2, Download, Copy, AlertTriangle } from "lucide-react";
 import { LinkedAccounts } from "@/components/settings/linked-accounts";
+import { EmailPreferences } from "@/components/settings/email-preferences";
 
 export function SecuritySettings() {
   const t = useTranslations("settings");
@@ -509,6 +510,9 @@ export function SecuritySettings() {
 
       {/* Linked OAuth Accounts */}
       <LinkedAccounts />
+
+      {/* Email Notification Preferences */}
+      <EmailPreferences />
     </div>
   );
 }

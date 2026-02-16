@@ -19,6 +19,9 @@ import {
   enqueuePasswordResetEmail,
   enqueueEmailChangeNotification,
   enqueueEmailChangeVerification,
+  enqueueTwoFactorEnabledEmail,
+  enqueueTwoFactorDisabledEmail,
+  enqueueOAuthUnlinkedEmail,
 } from "@/lib/email/queue";
 import bcrypt from "bcryptjs";
 import { createPendingToken, consumePendingToken } from "@/lib/two-factor-pending";
@@ -398,7 +401,7 @@ export const accountRouter = router({
       });
 
       // Notify old email about the change
-      await enqueueEmailChangeNotification(oldEmail, newEmail, family.name, family.defaultLocale);
+      await enqueueEmailChangeNotification(ctx.session.familyId, oldEmail, newEmail, family.name, family.defaultLocale);
 
       // Send verification to new email
       const rawToken = await createEmailToken(ctx.session.familyId, "EMAIL_CHANGE", { newEmail });
@@ -594,6 +597,10 @@ export const accountRouter = router({
         });
       });
 
+      enqueueTwoFactorEnabledEmail(
+        family.id, family.email, family.defaultLocale, family.name
+      ).catch(() => {});
+
       return { recoveryCodes: plain };
     }),
 
@@ -627,6 +634,10 @@ export const accountRouter = router({
           where: { familyId: family.id },
         });
       });
+
+      enqueueTwoFactorDisabledEmail(
+        family.id, family.email, family.defaultLocale, family.name
+      ).catch(() => {});
 
       return { success: true };
     }),
@@ -739,12 +750,25 @@ export const accountRouter = router({
         });
       }
 
+      const accountToUnlink = await db.oAuthAccount.findFirst({
+        where: { id: input.accountId, familyId: ctx.session.familyId },
+        select: { provider: true, email: true },
+      });
+
       await db.oAuthAccount.deleteMany({
         where: {
           id: input.accountId,
           familyId: ctx.session.familyId,
         },
       });
+
+      if (accountToUnlink) {
+        const providerName = accountToUnlink.provider === "GOOGLE" ? "Google" : "Microsoft";
+        enqueueOAuthUnlinkedEmail(
+          family.id, family.email, family.defaultLocale, family.name,
+          providerName, accountToUnlink.email
+        ).catch(() => {});
+      }
 
       return { success: true };
     }),
@@ -778,5 +802,43 @@ export const accountRouter = router({
       });
 
       return { success: true };
+    }),
+
+  /** Get email notification preferences (admin only). */
+  getEmailPreferences: adminProcedure.query(async ({ ctx }) => {
+    return db.emailPreference.findMany({
+      where: { familyId: ctx.session.familyId },
+    });
+  }),
+
+  /** Update a single email notification preference (admin only). */
+  updateEmailPreference: adminProcedure
+    .input(z.object({
+      type: z.enum([
+        "TWO_FACTOR_ENABLED",
+        "TWO_FACTOR_DISABLED",
+        "OAUTH_LINKED",
+        "OAUTH_UNLINKED",
+        "EMAIL_CHANGE_NOTIFICATION",
+      ]),
+      enabled: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return db.emailPreference.upsert({
+        where: {
+          familyId_type: {
+            familyId: ctx.session.familyId,
+            type: input.type,
+          },
+        },
+        create: {
+          familyId: ctx.session.familyId,
+          type: input.type,
+          enabled: input.enabled,
+        },
+        update: {
+          enabled: input.enabled,
+        },
+      });
     }),
 });

@@ -387,6 +387,16 @@
     "notificationType_levelUp": "Level-Aufstieg",
     "notificationType_adminAnnouncement": "Ankündigungen & Zusammenfassungen",
 
+    "emailPreferences": "E-Mail-Benachrichtigungen",
+    "emailPreferencesDescription": "Lege fest, welche Sicherheits-E-Mails an deine Familien-E-Mail-Adresse gesendet werden.",
+    "emailPreferenceSaveFailed": "E-Mail-Einstellung konnte nicht gespeichert werden.",
+    "emailNotificationType_twoFactorEnabled": "Benachrichtigung bei 2FA-Aktivierung",
+    "emailNotificationType_twoFactorDisabled": "Benachrichtigung bei 2FA-Deaktivierung",
+    "emailNotificationType_oauthLinked": "Benachrichtigung bei Konto-Verknuepfung",
+    "emailNotificationType_oauthUnlinked": "Benachrichtigung bei Konto-Trennung",
+    "emailNotificationType_emailChangeNotification": "Benachrichtigung bei E-Mail-Aenderung",
+    "emailAlwaysSentNote": "Passwort-Zuruecksetzungs- und E-Mail-Verifizierungsnachrichten werden immer gesendet und koennen nicht deaktiviert werden.",
+
     "pushNotifications": "Push-Benachrichtigungen",
     "pushNotificationsDescription": "Erhalte Browser-Push-Benachrichtigungen auch wenn die App im Hintergrund ist.",
     "enablePush": "Push-Benachrichtigungen aktivieren",

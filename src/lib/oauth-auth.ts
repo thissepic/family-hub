@@ -3,6 +3,7 @@ import { setAccountSession, getRequestMeta } from "@/lib/auth";
 import { sealData } from "iron-session";
 import { cookies } from "next/headers";
 import type { Family, OAuthProvider } from "@prisma/client";
+import { enqueueOAuthLinkedEmail } from "@/lib/email/queue";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,19 @@ export async function processOAuthCallback(
         displayName: userInfo.displayName,
       },
     });
+
+    const linkingFamily = await db.family.findUnique({
+      where: { id: linkToFamilyId },
+      select: { email: true, name: true, defaultLocale: true },
+    });
+    if (linkingFamily) {
+      const providerName = userInfo.provider === "GOOGLE" ? "Google" : "Microsoft";
+      enqueueOAuthLinkedEmail(
+        linkToFamilyId, linkingFamily.email, linkingFamily.defaultLocale, linkingFamily.name,
+        providerName, userInfo.email
+      ).catch(() => {});
+    }
+
     return { action: "login", familyId: linkToFamilyId };
   }
 
@@ -87,6 +101,12 @@ export async function processOAuthCallback(
           data: { emailVerified: true },
         });
       }
+
+      const providerName = userInfo.provider === "GOOGLE" ? "Google" : "Microsoft";
+      enqueueOAuthLinkedEmail(
+        existingFamily.id, existingFamily.email, existingFamily.defaultLocale, existingFamily.name,
+        providerName, userInfo.email
+      ).catch(() => {});
 
       return { action: "link_and_login", familyId: existingFamily.id };
     }
