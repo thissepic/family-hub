@@ -18,6 +18,9 @@ Built for households of 6+ members. Deployable on a Raspberry Pi or a small VPS.
 - **Notifications** &mdash; In-app and Web Push notifications with per-member preferences
 - **Global Search** &mdash; Full-text search across all modules (Cmd/Ctrl+K)
 - **Registration & Setup** &mdash; Account registration wizard and guided first-time family configuration
+- **OAuth Sign-In** &mdash; Sign in or register with Google or Microsoft accounts
+- **Two-Factor Authentication** &mdash; TOTP-based 2FA with recovery codes for account security
+- **Email Verification** &mdash; Email address verification, password reset, and email change flows via SMTP
 
 ## Tech Stack
 
@@ -30,7 +33,8 @@ Built for households of 6+ members. Deployable on a Raspberry Pi or a small VPS.
 | Database | [PostgreSQL 16](https://www.postgresql.org/) via [Prisma 6](https://www.prisma.io/) |
 | Real-time | [Socket.IO 4](https://socket.io/) |
 | Background Jobs | [BullMQ 5](https://docs.bullmq.io/) + [Redis 7](https://redis.io/) |
-| Auth | Two-layer (email/password + PIN) via [iron-session](https://github.com/vvo/iron-session) + bcrypt |
+| Auth | Two-layer (email/password + PIN) via [iron-session](https://github.com/vvo/iron-session) + bcrypt, OAuth (Google/Microsoft), 2FA ([otplib](https://github.com/yeojz/otplib)) |
+| Email | [nodemailer](https://nodemailer.com/) via BullMQ queue |
 | Calendar | [FullCalendar 6](https://fullcalendar.io/) + [rrule](https://github.com/jkbrzt/rrule) |
 | Rich Text | [Tiptap 3](https://tiptap.dev/) |
 | i18n | [next-intl](https://next-intl-docs.vercel.app/) (EN/DE) |
@@ -62,14 +66,18 @@ family-hub/
 │   │   ├── notifications/    # In-app & push notification helpers
 │   │   ├── socket/           # Socket.IO server & events
 │   │   ├── maintenance/      # Background job coordination (BullMQ)
+│   │   ├── email/            # SMTP transporter, templates, BullMQ queue & worker
 │   │   ├── auth.ts           # Session management
+│   │   ├── oauth-auth.ts     # OAuth sign-in/link/register logic
+│   │   ├── two-factor.ts     # TOTP generation, verification, recovery codes
 │   │   └── db.ts             # Prisma client singleton
 │   └── i18n/                 # next-intl configuration
 ├── messages/                 # Translation files (en.json, de.json)
 ├── public/                   # PWA manifest, service worker, icons
 ├── scripts/                  # Build-time scripts (SW version injection)
-├── docker-compose.yml        # PostgreSQL, Redis, Caddy, App
+├── docker-compose.yml        # PostgreSQL, Redis, Caddy, App, Migrate
 ├── Dockerfile                # 3-stage Alpine build
+├── Dockerfile.migrate        # Prisma migration runner
 └── Caddyfile                 # Reverse proxy config
 ```
 
@@ -169,30 +177,50 @@ Caddy (:80/:443)  ──  automatic HTTPS
                          │
                          ├── PostgreSQL (:5432)
                          └── Redis (:6379)
+
+Startup order:
+  1. PostgreSQL + Redis start
+  2. migrate service runs prisma migrate deploy, then exits
+  3. app service starts (depends on successful migration)
 ```
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
+| **Core** | | | |
 | `DATABASE_URL` | Yes | &mdash; | PostgreSQL connection string |
 | `REDIS_URL` | Yes | &mdash; | Redis connection string |
 | `SESSION_SECRET` | Yes | &mdash; | iron-session encryption key (32+ chars) |
 | `SESSION_TTL` | No | `86400` | Default session duration in seconds (24h) |
 | `REMEMBER_ME_TTL` | No | `2592000` | "Remember Me" session duration in seconds (30d) |
 | `NEXT_PUBLIC_APP_URL` | Yes | &mdash; | Public URL of the app |
+| **Docker** | | | |
 | `DOMAIN` | Docker | `localhost` | Domain for Caddy TLS |
 | `POSTGRES_PASSWORD` | Docker | `familyhub` | PostgreSQL password |
+| **Socket.IO** | | | |
 | `SOCKET_PORT` | No | `3001` | Socket.IO server port |
-| `NEXT_PUBLIC_SOCKET_URL` | No | `http://localhost:3001` | Socket.IO client URL |
-| `GOOGLE_CLIENT_ID` | No | &mdash; | Google Calendar OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | No | &mdash; | Google Calendar OAuth secret |
-| `GOOGLE_REDIRECT_URI` | No | &mdash; | Google OAuth callback URL |
-| `MICROSOFT_CLIENT_ID` | No | &mdash; | Outlook/Microsoft OAuth client ID |
-| `MICROSOFT_CLIENT_SECRET` | No | &mdash; | Outlook/Microsoft OAuth secret |
+| `NEXT_PUBLIC_SOCKET_URL` | No | auto-detected | Socket.IO client URL (derived from `window.location` in production) |
+| **Email (SMTP)** | | | |
+| `SMTP_HOST` | No | &mdash; | SMTP server hostname |
+| `SMTP_PORT` | No | &mdash; | SMTP server port |
+| `SMTP_SECURE` | No | `false` | Use TLS for SMTP connection |
+| `SMTP_USER` | No | &mdash; | SMTP authentication username |
+| `SMTP_PASS` | No | &mdash; | SMTP authentication password |
+| `SMTP_FROM` | No | &mdash; | Sender address (e.g. `Family Hub <noreply@example.com>`) |
+| **OAuth (Calendar Sync)** | | | |
+| `GOOGLE_CLIENT_ID` | No | &mdash; | Google OAuth client ID (shared with auth) |
+| `GOOGLE_CLIENT_SECRET` | No | &mdash; | Google OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | No | &mdash; | Google Calendar OAuth callback URL |
+| `MICROSOFT_CLIENT_ID` | No | &mdash; | Microsoft OAuth client ID (shared with auth) |
+| `MICROSOFT_CLIENT_SECRET` | No | &mdash; | Microsoft OAuth client secret |
 | `MICROSOFT_TENANT_ID` | No | `common` | Azure AD tenant |
-| `MICROSOFT_REDIRECT_URI` | No | &mdash; | Microsoft OAuth callback URL |
-| `TOKEN_ENCRYPTION_KEY` | No | &mdash; | AES-256-GCM key for OAuth token storage |
+| `MICROSOFT_REDIRECT_URI` | No | &mdash; | Microsoft Calendar OAuth callback URL |
+| **OAuth (Sign-In)** | | | |
+| `GOOGLE_AUTH_REDIRECT_URI` | No | &mdash; | Google sign-in OAuth callback URL |
+| `MICROSOFT_AUTH_REDIRECT_URI` | No | &mdash; | Microsoft sign-in OAuth callback URL |
+| **Security** | | | |
+| `TOKEN_ENCRYPTION_KEY` | No | &mdash; | AES-256-GCM key for OAuth tokens and 2FA secrets |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No | &mdash; | Web Push VAPID public key |
 | `VAPID_PRIVATE_KEY` | No | &mdash; | Web Push VAPID private key |
 | `VAPID_SUBJECT` | No | &mdash; | Web Push contact (mailto: URI) |
@@ -200,6 +228,7 @@ Caddy (:80/:443)  ──  automatic HTTPS
 | `RATE_LIMIT_LOGIN_WINDOW` | No | `900` | Login rate limit window in seconds (15 min) |
 | `ACCOUNT_LOCKOUT_THRESHOLD` | No | `10` | Failed attempts before account lockout |
 | `ACCOUNT_LOCKOUT_DURATION` | No | `3600` | Account lockout duration in seconds (1h) |
+| **Backups** | | | |
 | `BACKUP_DIR` | No | `/backups` | Database backup directory |
 | `BACKUP_RETENTION_DAYS` | No | `7` | Days to keep backups |
 
@@ -242,13 +271,42 @@ Sync supports inbound-only or two-way modes with configurable privacy (full deta
 
 Family Hub uses a two-layer authentication system:
 
-1. **Account login** &mdash; Each family registers with an email and password. On login, the family account is authenticated and a secure session is created.
-2. **Profile selection** &mdash; After account login, the user selects their family member profile and enters a personal PIN (hashed with bcrypt). This upgrades the session to a full session with member identity and role.
-3. A 24-hour encrypted session cookie is set via iron-session (extendable to 30 days with "Remember Me").
-4. Two roles: **Admin** (full management) and **Member** (personal use).
-5. Rate limiting protects against brute-force attacks (5 login attempts per 15 min, account lockout after 10 failures, 5 PIN attempts per 15 min per member).
+1. **Account login** &mdash; Each family registers with an email and password (or via OAuth with Google/Microsoft). On login, the family account is authenticated and a secure session is created.
+2. **Two-factor authentication (optional)** &mdash; If 2FA is enabled, the user must enter a TOTP code from an authenticator app (or a recovery code) before the session is granted.
+3. **Profile selection** &mdash; After account login, the user selects their family member profile and enters a personal PIN (hashed with bcrypt). This upgrades the session to a full session with member identity and role.
+4. A 24-hour encrypted session cookie is set via iron-session (extendable to 30 days with "Remember Me"). Cookies use `SameSite=lax` to support OAuth redirect flows.
+5. Two roles: **Admin** (full management) and **Member** (personal use).
+6. Rate limiting protects against brute-force attacks (5 login attempts per 15 min, account lockout after 10 failures, 5 PIN attempts per 15 min per member, 5 TOTP attempts per 15 min).
 
-The registration wizard guides new families through account creation, admin profile setup, and initial configuration.
+### OAuth Sign-In
+
+Families can register or sign in using Google or Microsoft accounts via OAuth 2.0. OAuth uses the same client credentials as calendar sync but with separate redirect URIs (`/api/auth/google/callback`, `/api/auth/microsoft/callback`).
+
+- **New registration:** OAuth redirects to the registration wizard with email pre-filled and password step skipped. Email is automatically marked as verified.
+- **Existing account:** If the OAuth email matches a verified family account, the OAuth identity is auto-linked and the user is logged in.
+- **Account linking:** Existing families can link/unlink OAuth providers in Settings. OAuth-only accounts can set a password later.
+
+### Two-Factor Authentication (2FA)
+
+Admins can enable TOTP-based two-factor authentication in Settings &rarr; Security. Requires email verification first.
+
+- **Setup:** Scan QR code with any authenticator app (Google Authenticator, Authy, etc.), verify with a 6-digit code.
+- **Recovery codes:** 10 single-use recovery codes (format: `XXXX-XXXX`) are generated on setup. Download and store them securely.
+- **Login flow:** After email/password verification, a pending token (5 min TTL, stored in Redis) redirects the user to `/verify-2fa` where they enter a TOTP code or recovery code.
+- **Security:** TOTP secrets are encrypted with AES-256-GCM before database storage. Recovery codes are bcrypt-hashed.
+
+### Email Verification & Password Reset
+
+Email verification, password reset, and email change flows require SMTP configuration (see [Environment Variables](#environment-variables)).
+
+- **Verification:** A verification email is sent on registration. An unverified-email banner appears on the dashboard until verified. Tokens expire after 24 hours.
+- **Password reset:** Users request a reset at `/forgot-password`. A reset link (1h expiry) is emailed. After reset, all active sessions are invalidated.
+- **Email change:** Admins can change the account email in Settings. A notification is sent to the old email and a verification link to the new one.
+- **Development:** Use `npx maildev` for a local SMTP server (port 1025) with a web UI on port 1080.
+
+Emails are sent via a BullMQ queue with 3 retry attempts. The app functions without SMTP &mdash; email features are silently disabled.
+
+The registration wizard guides new families through account creation (email/password or OAuth), admin profile setup, and initial configuration.
 
 ## PWA & Offline Support
 

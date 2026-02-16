@@ -34,6 +34,7 @@ This document describes the system architecture, data flow patterns, and compone
 │  ┌──────────────────────┼───────────────────────────┐   │
 │  │   BullMQ Workers     │    (background jobs)      │   │
 │  │   - Calendar sync    │    - Maintenance           │   │
+│  │   - Email            │                            │   │
 │  └──────────────────────┼───────────────────────────┘   │
 └─────────────────────────┼───────────────────────────────┘
                           │
@@ -143,7 +144,7 @@ src/app/                    Pages (Next.js App Router)
   ├── layout.tsx            Root layout (wraps all providers)
   │     └── Providers:      ThemeProvider, TRPCProvider, SocketProvider, SWRegister
   │
-  ├── (auth)/               Public pages (login, register, profiles, setup)
+  ├── (auth)/               Public pages (login, register, profiles, setup, verify-email, reset-password, verify-2fa)
   ├── (dashboard)/          Protected pages (all modules)
   │     └── layout.tsx      Dashboard layout (Sidebar + TopNav + BottomNav)
   ├── hub/                  Kiosk display (token-protected)
@@ -178,7 +179,11 @@ src/lib/
   ├── rewards/              XP engine & achievement evaluation
   ├── notifications/        In-app + push notification creation
   ├── socket/               Socket.IO server & typed events
-  └── maintenance/          BullMQ background job workers
+  ├── maintenance/          BullMQ background job workers
+  ├── email/                SMTP transporter, HTML templates, BullMQ queue & worker
+  ├── oauth-auth.ts         OAuth sign-in/link/register logic
+  ├── two-factor.ts         TOTP generation, QR codes, recovery codes
+  └── two-factor-pending.ts Redis-based pending 2FA tokens
 ```
 
 ## Authentication & Authorization
@@ -203,7 +208,7 @@ interface FullSessionData extends SessionData {
 }
 ```
 
-- Cookie: `HttpOnly`, `Secure` (production), `SameSite=strict`
+- Cookie: `HttpOnly`, `Secure` (production), `SameSite=lax` (required for OAuth redirect flows)
 - Encryption: AES (iron-session uses `SESSION_SECRET`)
 - TTL: 24 hours (default), 30 days with "Remember Me"
 - Active sessions tracked in `ActiveSession` table for admin visibility
@@ -217,21 +222,44 @@ interface FullSessionData extends SessionData {
 | `protectedProcedure` | Full session required (`memberId` + `role`) | All standard CRUD operations |
 | `adminProcedure` | Full session + ADMIN role | Family settings, member management, reward/achievement CRUD |
 
-### Authentication Flow
+### Authentication Flows
 
 ```
-Registration (new family):
+Registration (email/password):
 1. GET /register  →  3-step wizard
 2. Step 1: Email + password + family name + language
 3. Step 2: Admin profile (name, PIN, color)
 4. Step 3: Completion → auto-login → redirect to dashboard
+5. Verification email sent (24h expiry, non-blocking)
 
-Login (existing family):
+Registration (OAuth):
+1. GET /register → click "Sign up with Google/Microsoft"
+2. Redirect to provider → user authorizes → callback
+3. If email not linked → store OAuth data in sealed cookie → redirect to /register?oauth=provider
+4. Step 1: Family name (email pre-filled, no password needed)
+5. Step 2: Admin profile (name, PIN, color)
+6. Step 3: Completion → auto-login → emailVerified=true → redirect to dashboard
+
+Login (email/password):
 1. GET /login  →  email + password form
 2. POST account.login({ email, password, rememberMe })
 3. Server: bcrypt.compare(password, family.passwordHash)
-4. Success: setAccountSession(familyId, rememberMe)  →  account-level cookie
-5. Redirect to /profiles
+4. If 2FA disabled: setAccountSession(familyId, rememberMe) → redirect to /profiles
+5. If 2FA enabled: createPendingToken(familyId, rememberMe) → redirect to /verify-2fa?token=...
+
+Login (OAuth):
+1. GET /login → click "Sign in with Google/Microsoft"
+2. Redirect to provider → user authorizes → callback
+3. If OAuth identity exists → login → redirect to /profiles
+4. If email matches verified family → auto-link OAuth → login → redirect to /profiles
+5. If no match → redirect to /register?oauth=provider
+
+Two-Factor Verification:
+1. GET /verify-2fa?token=...  →  TOTP code or recovery code input
+2. POST account.verifyTwoFactor({ token, code })
+3. Server: validate pending token (5 min TTL, Redis)
+4. Server: verify TOTP code (±1 time step) or match recovery code (bcrypt)
+5. Success: consume pending token → setAccountSession → redirect to /profiles
 
 Profile selection:
 6. GET /profiles  →  account.listMembers()  →  show member avatars
@@ -245,6 +273,34 @@ Profile selection:
 
 Profile switching (without re-login):
 - POST auth.switchProfile()  →  downgradeSession()  →  back to /profiles
+
+Email verification:
+1. Verification email sent on registration (or resend from dashboard banner)
+2. User clicks link: GET /verify-email?token=...
+3. POST account.verifyEmail({ token })
+4. Server: validate token (type, expiry, not used) → set emailVerified=true
+
+Password reset:
+1. GET /forgot-password → enter email
+2. POST account.requestPasswordReset({ email }) → always returns success (anti-enumeration)
+3. If email exists: send PASSWORD_RESET token (1h expiry)
+4. User clicks link: GET /reset-password?token=...
+5. POST account.resetPassword({ token, newPassword })
+6. Server: update passwordHash, invalidate all active sessions
+```
+
+### OAuth Account Linking
+
+```
+From Settings → Security → Linked Accounts:
+1. User clicks "Link Google/Microsoft" → /api/auth/{provider}?action=link
+2. OAuth state includes familyId → callback creates OAuthAccount record
+3. Redirect back to settings with success message
+
+Safeguards:
+- Cannot unlink the last authentication method
+- OAuth-only accounts can set a password at any time
+- Auto-linking only occurs when OAuth email matches a verified family account
 ```
 
 ## Data Flow Patterns
@@ -276,8 +332,12 @@ Server startup (instrumentation.ts)
   │     ├── weekly-recap                "0 18 * * 0"    (Sunday 6:00 PM)
   │     └── daily-backup                "30 3 * * *"    (daily 3:30 AM)
   │
-  └── startSyncWorker()
-        └── periodic-sync              "*/5 * * * *"   (every 5 minutes)
+  ├── startSyncWorker()
+  │     └── periodic-sync              "*/5 * * * *"   (every 5 minutes)
+  │
+  └── startEmailWorker()
+        └── Processes email jobs (verification, password reset, email change)
+            Concurrency: 2, retries: 3, exponential backoff (3s base)
 ```
 
 ## Provider Architecture

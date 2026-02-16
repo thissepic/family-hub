@@ -17,17 +17,30 @@ Every procedure uses one of four authorization levels:
 
 ### account
 
-Account-level authentication (email/password login, session management).
+Account-level authentication (email/password login, OAuth, 2FA, session management, email verification).
 
 | Procedure | Type | Auth | Description |
 |---|---|---|---|
-| `login` | mutation | public | Authenticate with email + password, create account session |
+| `login` | mutation | public | Authenticate with email + password. Returns `{ requiresTwoFactor, twoFactorToken }` if 2FA is enabled |
+| `verifyTwoFactor` | mutation | public | Verify TOTP code or recovery code using a pending 2FA token |
 | `listMembers` | query | :key: | List family members for profile selection (after account login) |
 | `changePassword` | mutation | :shield: | Change the family account password |
-| `changeEmail` | mutation | :shield: | Change the family account email (requires password verification) |
+| `changeEmail` | mutation | :shield: | Change the family account email (requires password, sends verification to new email) |
 | `activeSessions` | query | :shield: | List all active sessions for the family |
 | `invalidateSession` | mutation | :shield: | Remotely invalidate a specific session |
 | `loginAttempts` | query | :shield: | View login attempt history |
+| `verifyEmail` | mutation | public | Verify email address using a token from verification email |
+| `resendVerification` | mutation | :key: | Resend verification email (rate-limited) |
+| `requestPasswordReset` | mutation | public | Request a password reset email (always returns success to prevent enumeration) |
+| `resetPassword` | mutation | public | Reset password using token from email, invalidates all sessions |
+| `setupTwoFactor` | mutation | :shield: | Generate TOTP secret and QR code for 2FA setup (requires email verification) |
+| `confirmTwoFactor` | mutation | :shield: | Verify authenticator code and enable 2FA, returns recovery codes |
+| `disableTwoFactor` | mutation | :shield: | Disable 2FA (requires valid TOTP code) |
+| `regenerateRecoveryCodes` | mutation | :shield: | Generate new recovery codes (requires valid TOTP code) |
+| `getTwoFactorStatus` | query | :shield: | Get 2FA status: enabled, email verified, remaining recovery codes |
+| `getLinkedAccounts` | query | :shield: | List linked OAuth accounts (Google/Microsoft) |
+| `unlinkOAuthAccount` | mutation | :shield: | Unlink an OAuth provider (cannot unlink last auth method) |
+| `setPassword` | mutation | :shield: | Set password for OAuth-only accounts |
 
 ### auth
 
@@ -48,7 +61,8 @@ Family CRUD, registration, and settings.
 | Procedure | Type | Auth | Description |
 |---|---|---|---|
 | `get` | query | :lock: | Get family details with all members |
-| `register` | mutation | public | Register a new family with account credentials + admin profile (rate-limited) |
+| `register` | mutation | public | Register a new family with email/password + admin profile (rate-limited, sends verification email) |
+| `registerWithOAuth` | mutation | public | Register a new family via OAuth (consumes pending OAuth cookie, auto-verifies email) |
 | `update` | mutation | :shield: | Update family name, locale, theme |
 | `deleteFamily` | mutation | :shield: | Delete the entire family and all associated data (requires confirmation) |
 
@@ -281,11 +295,19 @@ In addition to tRPC, the following REST endpoints exist:
 
 | Route | Method | Purpose |
 |---|---|---|
-| `/api/calendar-sync/google` | GET | Initiate Google OAuth flow |
-| `/api/calendar-sync/google/callback` | GET | Google OAuth callback |
-| `/api/calendar-sync/outlook` | GET | Initiate Microsoft OAuth flow |
-| `/api/calendar-sync/outlook/callback` | GET | Microsoft OAuth callback |
+| **Calendar Sync OAuth** | | |
+| `/api/calendar-sync/google` | GET | Initiate Google Calendar OAuth flow |
+| `/api/calendar-sync/google/callback` | GET | Google Calendar OAuth callback |
+| `/api/calendar-sync/outlook` | GET | Initiate Microsoft Calendar OAuth flow |
+| `/api/calendar-sync/outlook/callback` | GET | Microsoft Calendar OAuth callback |
+| **Authentication OAuth** | | |
+| `/api/auth/google` | GET | Initiate Google sign-in/register OAuth flow (accepts `?action=link` for account linking) |
+| `/api/auth/google/callback` | GET | Google sign-in OAuth callback (login, auto-link, or redirect to registration) |
+| `/api/auth/microsoft` | GET | Initiate Microsoft sign-in/register OAuth flow (accepts `?action=link` for account linking) |
+| `/api/auth/microsoft/callback` | GET | Microsoft sign-in OAuth callback (login, auto-link, or redirect to registration) |
+| **Push Notifications** | | |
 | `/api/push/subscribe` | POST | Register a Web Push subscription |
 | `/api/push/unsubscribe` | POST | Remove a Web Push subscription |
+| **File Uploads** | | |
 | `/api/uploads` | POST | Upload a file (returns filename) |
 | `/api/uploads/[filename]` | GET | Retrieve an uploaded file |

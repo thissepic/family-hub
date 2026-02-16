@@ -30,7 +30,7 @@ Socket.IO Server (:3001)
 The `SocketProvider` component initializes the Socket.IO client:
 
 1. Reads `familyId` from the session
-2. Connects to `NEXT_PUBLIC_SOCKET_URL` with `{ familyId }` in the handshake query
+2. Connects to the Socket.IO server with `{ familyId }` in the handshake query. The URL is derived from `window.location` at runtime (falls back to `NEXT_PUBLIC_SOCKET_URL` if set), allowing transparent operation behind reverse proxies like Caddy.
 3. Transports: WebSocket (preferred), polling (fallback)
 4. CORS: configured to accept the app's origin with credentials
 
@@ -99,18 +99,19 @@ useEffect(() => {
 
 ## BullMQ (Background Jobs)
 
-Source files: `src/lib/maintenance/`, `src/lib/calendar-sync/`.
+Source files: `src/lib/maintenance/`, `src/lib/calendar-sync/`, `src/lib/email/`.
 
 ### Overview
 
-Two BullMQ queues run as workers inside the Next.js server process:
+Three BullMQ queues run as workers inside the Next.js server process:
 
 | Queue | Worker | Concurrency | Purpose |
 |---|---|---|---|
 | `maintenance` | `createMaintenanceWorker` | 1 | Scheduled housekeeping |
 | `calendar-sync` | `createSyncWorker` | 3 | External calendar sync |
+| `email` | `createEmailWorker` | 2 | Transactional email delivery |
 
-Both queues use Redis (via `ioredis`) for job storage and scheduling.
+All queues use Redis (via `ioredis`) for job storage and scheduling.
 
 ### Maintenance Jobs
 
@@ -126,6 +127,53 @@ Both queues use Redis (via `ioredis`) for job storage and scheduling.
 |---|---|---|
 | `periodic-sync` | `*/5 * * * *` (every 5 min) | Iterate all active connections, sync if interval passed |
 | `sync-connection` | On-demand | Sync a specific connection (used by manual trigger / OAuth callback) |
+
+### Email Jobs
+
+Source files: `src/lib/email/queue.ts`, `src/lib/email/worker.ts`, `src/lib/email/templates.ts`, `src/lib/email/transporter.ts`.
+
+| Job Name | Trigger | Description |
+|---|---|---|
+| `verification` | On registration, on resend | Send email verification link (24h expiry) |
+| `password-reset` | On password reset request | Send password reset link (1h expiry) |
+| `email-change-notification` | On email change | Notify old email address about the change |
+| `email-change-verification` | On email change | Send verification link to new email address |
+
+**Architecture:**
+
+```
+tRPC mutation (e.g. account.resendVerification)
+  │
+  ├── 1. createEmailToken() → SHA-256 hash stored in DB, raw token in URL
+  │
+  ├── 2. enqueueVerificationEmail() → add job to BullMQ "email" queue
+  │
+  └── 3. Return response (non-blocking; email sent asynchronously)
+
+Email Worker (background):
+  │
+  ├── 1. Pick job from queue
+  ├── 2. Render bilingual HTML template (EN/DE)
+  ├── 3. Send via nodemailer SMTP transporter
+  └── 4. On failure: retry up to 3 times (exponential backoff, 3s base)
+```
+
+**Email Templates:**
+
+All emails use responsive HTML with a branded header (Family Hub blue), call-to-action buttons, and fallback plain-text links. Templates support English and German. The language is determined by the family's `defaultLocale`.
+
+**SMTP Configuration:**
+
+The transporter reads from `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` environment variables. If SMTP is not configured, the worker silently skips email delivery and the app continues to function without email features.
+
+For development, use `npx maildev` which provides an SMTP server on port 1025 and a web UI on port 1080.
+
+**Job Options:**
+- Attempts: 3
+- Backoff: exponential, starting at 3 seconds
+- Completed jobs kept: 200
+- Failed jobs kept: 50
+- Transporter auto-resets on connection errors for retry
 
 ### Job Configuration
 
@@ -148,16 +196,18 @@ Workers are initialized in `instrumentation.ts` (Next.js server startup hook):
 // instrumentation.ts
 import { startMaintenanceWorker } from "@/lib/maintenance/bootstrap";
 import { startSyncWorker } from "@/lib/calendar-sync/bootstrap";
+import { startEmailWorker } from "@/lib/email/bootstrap";
 import { initSocketServer } from "@/lib/socket/server";
 
 export async function register() {
   initSocketServer();
   await startMaintenanceWorker();
   await startSyncWorker();
+  await startEmailWorker();
 }
 ```
 
-If a worker fails to start (e.g., Redis not available), the error is caught and logged, but the app continues to function without background jobs.
+If a worker fails to start (e.g., Redis not available, SMTP not configured), the error is caught and logged, but the app continues to function without the affected background jobs.
 
 ### Weekly Recap
 

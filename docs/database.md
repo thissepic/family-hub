@@ -4,8 +4,8 @@ Family Hub uses PostgreSQL 16 with Prisma 6 as the ORM. The schema is defined in
 
 ## Overview
 
-- **34 models** across 7 domains
-- **23 enums** for type-safe status fields
+- **37 models** across 8 domains
+- **26 enums** for type-safe status fields
 - All IDs are UUIDs (`@default(cuid())`)
 - Timestamps: `createdAt` / `updatedAt` on all models
 - Cascading deletes where appropriate (family deletion removes all child data)
@@ -55,6 +55,9 @@ Family (1)
   ├── (1:1) XpSettings
   ├── (1:1) HubDisplaySettings
   ├── (1:N) ActivityEvent
+  ├── (1:N) OAuthAccount
+  ├── (1:N) EmailToken
+  ├── (1:N) TwoFactorRecoveryCode
   ├── (1:N) LoginAttempt
   └── (1:N) ActiveSession
 ```
@@ -65,10 +68,10 @@ Family (1)
 
 | Model | Purpose | Key Fields |
 |---|---|---|
-| **Family** | Root entity for a household | `name`, `email` (unique), `passwordHash`, `emailVerified`, `defaultLocale`, `theme` |
+| **Family** | Root entity for a household | `name`, `email` (unique), `passwordHash` (nullable for OAuth-only), `emailVerified`, `twoFactorEnabled`, `twoFactorSecret` (encrypted), `defaultLocale`, `theme` |
 | **FamilyMember** | A person in the family | `name`, `pinHash`, `role` (ADMIN/MEMBER), `avatar`, `color`, `locale`, `themePreference` |
 
-A family registers with an email and password (bcrypt-hashed). Each member has a bcrypt-hashed PIN for profile authentication and an optional personal locale override.
+A family registers with an email and password (bcrypt-hashed) or via OAuth (Google/Microsoft), in which case `passwordHash` is null. Each member has a bcrypt-hashed PIN for profile authentication and an optional personal locale override. If 2FA is enabled, `twoFactorSecret` stores the encrypted TOTP secret.
 
 ### Calendar
 
@@ -155,6 +158,20 @@ See [Rewards System](./rewards-system.md) for details on the XP engine.
 |---|---|---|
 | **HubDisplaySettings** | Kiosk configuration | `visiblePanels` (JSON), `layoutMode`, `rotationEnabled`, `rotationIntervalSec`, `theme`, `fontScale`, `nightDimEnabled`, `weatherEnabled`, `accessToken` |
 
+### OAuth & Email Tokens
+
+| Model | Purpose | Key Fields |
+|---|---|---|
+| **OAuthAccount** | Links a family to an OAuth provider identity | `familyId`, `provider` (GOOGLE/MICROSOFT), `providerAccountId`, `email`, `displayName` |
+| **EmailToken** | Hashed tokens for email verification, password reset, and email change | `familyId`, `tokenHash` (unique, SHA-256), `type` (VERIFICATION/PASSWORD_RESET/EMAIL_CHANGE), `expiresAt`, `usedAt`, `metadata` (JSON) |
+| **TwoFactorRecoveryCode** | Bcrypt-hashed single-use recovery codes for 2FA | `familyId`, `codeHash`, `usedAt` |
+
+`OAuthAccount` has a composite unique constraint on `(provider, providerAccountId)` and is indexed on `(provider, email)`. When a family registers or logs in via OAuth, the provider identity is stored here. A family can have multiple linked OAuth accounts.
+
+`EmailToken` stores SHA-256 hashed tokens (raw tokens are sent via email). Old unused tokens of the same type are auto-deleted when a new token is created. Token TTLs: VERIFICATION (24h), PASSWORD_RESET (1h), EMAIL_CHANGE (24h).
+
+`TwoFactorRecoveryCode` stores 10 bcrypt-hashed codes per family. Codes are single-use (marked with `usedAt` on consumption). All codes are regenerated at once.
+
 ### Security & Sessions
 
 | Model | Purpose | Key Fields |
@@ -191,6 +208,13 @@ Login attempts are indexed by `email`, `ipAddress`, and `createdAt` for efficien
 | `AchievementRarity` | `COMMON`, `RARE`, `EPIC`, `LEGENDARY` |
 | `NotificationType` | `CALENDAR_REMINDER`, `CHORE_DEADLINE`, `SWAP_REQUEST`, `REWARD_APPROVAL`, `ACHIEVEMENT`, `LEVEL_UP`, `ADMIN_ANNOUNCEMENT` |
 | `ActivityEventType` | `TASK_COMPLETED`, `CHORE_COMPLETED`, `EVENT_CREATED`, `EVENT_UPDATED`, `SHOPPING_ITEM_ADDED`, `MEAL_PLANNED`, `NOTE_PINNED`, `ACHIEVEMENT_UNLOCKED`, `LEVEL_UP`, `REWARD_REDEEMED` |
+
+### Authentication Enums
+
+| Enum | Values |
+|---|---|
+| `OAuthProvider` | `GOOGLE`, `MICROSOFT` |
+| `EmailTokenType` | `VERIFICATION`, `PASSWORD_RESET`, `EMAIL_CHANGE` |
 
 ### Configuration Enums
 
