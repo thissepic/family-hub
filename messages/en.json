@@ -60,7 +60,15 @@
     "useRecoveryCode": "Use a recovery code instead",
     "useAuthenticator": "Use authenticator app",
     "recoveryCodeWarning": "You have {count} recovery codes remaining. Consider regenerating them in settings.",
-    "backToLogin": "Back to login"
+    "backToLogin": "Back to login",
+    "orDivider": "or",
+    "signInWithGoogle": "Sign in with Google",
+    "signInWithMicrosoft": "Sign in with Microsoft",
+    "signUpWithGoogle": "Sign up with Google",
+    "signUpWithMicrosoft": "Sign up with Microsoft",
+    "oauthFailed": "Sign-in with external provider failed. Please try again.",
+    "oauthOnlyAccount": "This account uses social login. Please sign in with Google or Microsoft.",
+    "oauthNotConfigured": "This sign-in method is not configured. Please use email and password."
   },
   "register": {
     "title": "Create Your Family",
@@ -100,7 +108,12 @@
     "loggingIn": "Logging in...",
     "goToDashboard": "Go to Dashboard",
     "alreadyHaveAccount": "Already have an account?",
-    "loginInstead": "Log in"
+    "loginInstead": "Log in",
+    "stepFamily": "Family",
+    "oauthStepFamilyTitle": "Your Family",
+    "oauthStepFamilyDescription": "Set up your family name and language.",
+    "oauthVerificationNote": "Your email has been verified by {provider}.",
+    "oauthSessionExpired": "OAuth session expired. Please try again."
   },
   "setup": {
     "title": "Welcome to Family Hub",
@@ -467,7 +480,25 @@
     "downloadCodes": "Download as text file",
     "codeCopied": "Copied to clipboard.",
     "disableTwoFactorConfirm": "Disable Two-Factor Authentication?",
-    "disableTwoFactorDescription": "This will remove the extra security layer from your account. Enter your authenticator code to confirm."
+    "disableTwoFactorDescription": "This will remove the extra security layer from your account. Enter your authenticator code to confirm.",
+
+    "linkedAccounts": "Linked Accounts",
+    "linkedAccountsDescription": "Manage your linked Google and Microsoft accounts for sign-in.",
+    "linkGoogle": "Link Google Account",
+    "linkMicrosoft": "Link Microsoft Account",
+    "unlinkAccount": "Unlink",
+    "unlinkAccountConfirm": "Unlink {provider}?",
+    "unlinkAccountDescription": "You will no longer be able to sign in with {provider}. Make sure you have another sign-in method available.",
+    "cannotUnlinkLast": "Cannot remove your only sign-in method. Set a password or link another account first.",
+    "noLinkedAccounts": "No accounts linked yet.",
+    "accountUnlinked": "Account unlinked successfully.",
+    "setPassword": "Set Password",
+    "setPasswordDescription": "Set a password so you can also sign in with email and password.",
+    "passwordSet": "Password set successfully.",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm Password",
+    "passwordTooShort": "Password must be at least 8 characters.",
+    "passwordMismatch": "Passwords do not match."
   },
   "tasks": {
     "title": "Tasks",

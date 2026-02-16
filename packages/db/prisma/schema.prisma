@@ -134,6 +134,11 @@ enum EmailTokenType {
   EMAIL_CHANGE
 }
 
+enum OAuthProvider {
+  GOOGLE
+  MICROSOFT
+}
+
 enum NotificationType {
   CALENDAR_REMINDER
   CHORE_DEADLINE
@@ -181,7 +186,7 @@ model Family {
   id            String   @id @default(cuid())
   name          String
   email         String   @unique
-  passwordHash  String
+  passwordHash  String?
   emailVerified    Boolean  @default(false)
   twoFactorEnabled Boolean  @default(false)
   twoFactorSecret  String?
@@ -209,6 +214,7 @@ model Family {
   activeSessions     ActiveSession[]
   emailTokens             EmailToken[]
   twoFactorRecoveryCodes  TwoFactorRecoveryCode[]
+  oauthAccounts           OAuthAccount[]
 }
 
 model FamilyMember {
@@ -867,4 +873,21 @@ model TwoFactorRecoveryCode {
   family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 
   @@index([familyId])
+}
+
+model OAuthAccount {
+  id                String        @id @default(cuid())
+  familyId          String
+  provider          OAuthProvider
+  providerAccountId String
+  email             String
+  displayName       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([familyId])
+  @@index([provider, email])
 }

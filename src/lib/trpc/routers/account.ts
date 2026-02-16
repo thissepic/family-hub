@@ -87,6 +87,14 @@ export const accountRouter = router({
         });
       }
 
+      // OAuth-only account: no password set
+      if (family.passwordHash === null) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "OAUTH_ONLY_ACCOUNT",
+        });
+      }
+
       const valid = await bcrypt.compare(input.password, family.passwordHash);
 
       if (!valid) {
@@ -351,7 +359,13 @@ export const accountRouter = router({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      // Verify password
+      // Verify password (OAuth-only accounts have no password)
+      if (!family.passwordHash) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "OAUTH_ONLY_ACCOUNT",
+        });
+      }
       const valid = await bcrypt.compare(input.password, family.passwordHash);
       if (!valid) {
         throw new TRPCError({
@@ -672,4 +686,97 @@ export const accountRouter = router({
       recoveryCodesTotal: family.twoFactorRecoveryCodes.length,
     };
   }),
+
+  // ─── OAuth / Linked Accounts ──────────────────────────────────────────────
+
+  /** Get linked OAuth accounts for this family (admin only). */
+  getLinkedAccounts: adminProcedure.query(async ({ ctx }) => {
+    const [accounts, family] = await Promise.all([
+      db.oAuthAccount.findMany({
+        where: { familyId: ctx.session.familyId },
+        select: {
+          id: true,
+          provider: true,
+          email: true,
+          displayName: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+      db.family.findUnique({
+        where: { id: ctx.session.familyId },
+        select: { passwordHash: true },
+      }),
+    ]);
+
+    return {
+      accounts,
+      hasPassword: family?.passwordHash != null,
+    };
+  }),
+
+  /** Unlink an OAuth account (admin only). Cannot remove last auth method. */
+  unlinkOAuthAccount: adminProcedure
+    .input(z.object({ accountId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const family = await db.family.findUnique({
+        where: { id: ctx.session.familyId },
+        include: { oauthAccounts: { select: { id: true } } },
+      });
+
+      if (!family) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      // Prevent removing last auth method
+      const hasPassword = family.passwordHash !== null;
+      const oauthCount = family.oauthAccounts.length;
+
+      if (!hasPassword && oauthCount <= 1) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "CANNOT_UNLINK_LAST",
+        });
+      }
+
+      await db.oAuthAccount.deleteMany({
+        where: {
+          id: input.accountId,
+          familyId: ctx.session.familyId,
+        },
+      });
+
+      return { success: true };
+    }),
+
+  /** Set a password for an OAuth-only account (admin only). */
+  setPassword: adminProcedure
+    .input(z.object({
+      newPassword: z.string().min(8).max(128),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const family = await db.family.findUnique({
+        where: { id: ctx.session.familyId },
+      });
+
+      if (!family) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      if (family.passwordHash !== null) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Account already has a password. Use password reset instead.",
+        });
+      }
+
+      const passwordHash = await bcrypt.hash(input.newPassword, 10);
+
+      await db.family.update({
+        where: { id: ctx.session.familyId },
+        data: { passwordHash },
+      });
+
+      return { success: true };
+    }),
 });

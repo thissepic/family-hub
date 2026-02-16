@@ -60,7 +60,15 @@
     "useRecoveryCode": "Wiederherstellungscode verwenden",
     "useAuthenticator": "Authenticator-App verwenden",
     "recoveryCodeWarning": "Du hast noch {count} Wiederherstellungscodes übrig. Erwäge, sie in den Einstellungen neu zu generieren.",
-    "backToLogin": "Zurück zur Anmeldung"
+    "backToLogin": "Zurück zur Anmeldung",
+    "orDivider": "oder",
+    "signInWithGoogle": "Mit Google anmelden",
+    "signInWithMicrosoft": "Mit Microsoft anmelden",
+    "signUpWithGoogle": "Mit Google registrieren",
+    "signUpWithMicrosoft": "Mit Microsoft registrieren",
+    "oauthFailed": "Anmeldung über externen Anbieter fehlgeschlagen. Bitte versuche es erneut.",
+    "oauthOnlyAccount": "Dieses Konto nutzt Social Login. Bitte melde dich mit Google oder Microsoft an.",
+    "oauthNotConfigured": "Diese Anmeldemethode ist nicht konfiguriert. Bitte verwende E-Mail und Passwort."
   },
   "register": {
     "title": "Familie erstellen",
@@ -100,7 +108,12 @@
     "loggingIn": "Anmelden...",
     "goToDashboard": "Zum Dashboard",
     "alreadyHaveAccount": "Bereits ein Konto?",
-    "loginInstead": "Anmelden"
+    "loginInstead": "Anmelden",
+    "stepFamily": "Familie",
+    "oauthStepFamilyTitle": "Deine Familie",
+    "oauthStepFamilyDescription": "Lege den Familiennamen und die Sprache fest.",
+    "oauthVerificationNote": "Deine E-Mail wurde von {provider} verifiziert.",
+    "oauthSessionExpired": "OAuth-Sitzung abgelaufen. Bitte versuche es erneut."
   },
   "setup": {
     "title": "Willkommen bei Family Hub",
@@ -467,7 +480,25 @@
     "downloadCodes": "Als Textdatei herunterladen",
     "codeCopied": "In die Zwischenablage kopiert.",
     "disableTwoFactorConfirm": "Zwei-Faktor-Authentifizierung deaktivieren?",
-    "disableTwoFactorDescription": "Dies entfernt die zusätzliche Sicherheitsebene von deinem Konto. Gib deinen Authenticator-Code zur Bestätigung ein."
+    "disableTwoFactorDescription": "Dies entfernt die zusätzliche Sicherheitsebene von deinem Konto. Gib deinen Authenticator-Code zur Bestätigung ein.",
+
+    "linkedAccounts": "Verknüpfte Konten",
+    "linkedAccountsDescription": "Verwalte deine verknüpften Google- und Microsoft-Konten für die Anmeldung.",
+    "linkGoogle": "Google-Konto verknüpfen",
+    "linkMicrosoft": "Microsoft-Konto verknüpfen",
+    "unlinkAccount": "Trennen",
+    "unlinkAccountConfirm": "{provider} trennen?",
+    "unlinkAccountDescription": "Du kannst dich dann nicht mehr mit {provider} anmelden. Stelle sicher, dass du eine andere Anmeldemethode hast.",
+    "cannotUnlinkLast": "Deine einzige Anmeldemethode kann nicht entfernt werden. Setze zuerst ein Passwort oder verknüpfe ein anderes Konto.",
+    "noLinkedAccounts": "Noch keine Konten verknüpft.",
+    "accountUnlinked": "Konto erfolgreich getrennt.",
+    "setPassword": "Passwort festlegen",
+    "setPasswordDescription": "Lege ein Passwort fest, damit du dich auch mit E-Mail und Passwort anmelden kannst.",
+    "passwordSet": "Passwort erfolgreich festgelegt.",
+    "newPassword": "Neues Passwort",
+    "confirmPassword": "Passwort bestätigen",
+    "passwordTooShort": "Passwort muss mindestens 8 Zeichen lang sein.",
+    "passwordMismatch": "Passwörter stimmen nicht überein."
   },
   "tasks": {
     "title": "Aufgaben",

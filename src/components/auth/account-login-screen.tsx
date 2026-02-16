@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/lib/trpc/client";
@@ -10,18 +10,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 
 export function AccountLoginScreen() {
   const t = useTranslations("auth");
   const router = useRouter();
+  const searchParams = useSearchParams();
   const trpc = useTRPC();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+
+  // Handle OAuth error from redirect
+  useEffect(() => {
+    const oauthError = searchParams.get("error");
+    if (oauthError === "oauth_failed") {
+      setError(t("oauthFailed"));
+    } else if (oauthError === "too_many_attempts") {
+      setError(t("tooManyAttempts"));
+    } else if (oauthError === "oauth_not_configured") {
+      setError(t("oauthNotConfigured"));
+    }
+  }, [searchParams, t]);
 
   const loginMutation = useMutation(
     trpc.account.login.mutationOptions({
@@ -38,6 +52,8 @@ export function AccountLoginScreen() {
           setError(t("tooManyAttempts"));
         } else if (err.message.includes("locked")) {
           setError(t("accountLocked"));
+        } else if (err.message.includes("OAUTH_ONLY")) {
+          setError(t("oauthOnlyAccount"));
         } else {
           setError(t("invalidCredentials"));
         }
@@ -63,7 +79,21 @@ export function AccountLoginScreen() {
             {t("accountLoginSubtitle")}
           </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <OAuthButtons mode="login" />
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">
+                {t("orDivider")}
+              </span>
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">{t("email")}</Label>
@@ -74,7 +104,6 @@ export function AccountLoginScreen() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                autoFocus
               />
             </div>
 

@@ -36,6 +36,8 @@ const VERIFICATION_RESEND_MAX = 3;
 const VERIFICATION_RESEND_WINDOW_SEC = 3600; // 1 hour
 const TOTP_MAX_ATTEMPTS = 5;
 const TOTP_WINDOW_SEC = 900; // 15 min
+const OAUTH_MAX_ATTEMPTS = 10;
+const OAUTH_WINDOW_SEC = 900; // 15 min
 
 let loginLimiter: RateLimiterAbstract | null = null;
 let accountLockoutLimiter: RateLimiterAbstract | null = null;
@@ -45,6 +47,7 @@ let pinLimiter: RateLimiterAbstract | null = null;
 let passwordResetLimiter: RateLimiterAbstract | null = null;
 let verificationResendLimiter: RateLimiterAbstract | null = null;
 let totpLimiter: RateLimiterAbstract | null = null;
+let oauthLimiter: RateLimiterAbstract | null = null;
 
 function getLoginLimiter(): RateLimiterAbstract {
   if (loginLimiter) return loginLimiter;
@@ -214,6 +217,27 @@ function getTotpLimiter(): RateLimiterAbstract {
   return totpLimiter;
 }
 
+function getOAuthLimiter(): RateLimiterAbstract {
+  if (oauthLimiter) return oauthLimiter;
+  const redis = getRedis();
+
+  if (redis) {
+    oauthLimiter = new RateLimiterRedis({
+      storeClient: redis,
+      keyPrefix: "rl:oauth:ip",
+      points: OAUTH_MAX_ATTEMPTS,
+      duration: OAUTH_WINDOW_SEC,
+    });
+  } else {
+    oauthLimiter = new RateLimiterMemory({
+      keyPrefix: "rl:oauth:ip",
+      points: OAUTH_MAX_ATTEMPTS,
+      duration: OAUTH_WINDOW_SEC,
+    });
+  }
+  return oauthLimiter;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /** Check if IP is rate-limited for login attempts. Throws if blocked. */
@@ -326,5 +350,14 @@ export async function resetTotpRateLimit(key: string): Promise<void> {
     await getTotpLimiter().delete(key);
   } catch {
     // Non-critical, ignore
+  }
+}
+
+/** Check OAuth initiation rate limit by IP. Throws if blocked. */
+export async function checkOAuthRateLimit(ip: string): Promise<void> {
+  try {
+    await getOAuthLimiter().consume(ip);
+  } catch {
+    throw new Error("TOO_MANY_REQUESTS");
   }
 }

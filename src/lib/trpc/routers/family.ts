@@ -6,6 +6,8 @@ import { clearSession, setAccountSession, getRequestMeta } from "@/lib/auth";
 import { checkRegistrationRateLimit } from "@/lib/rate-limit";
 import { createEmailToken } from "@/lib/email/tokens";
 import { enqueueVerificationEmail } from "@/lib/email/queue";
+import { consumeOAuthPending } from "@/lib/oauth-auth";
+import type { OAuthProvider } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
@@ -103,6 +105,92 @@ export const familyRouter = router({
         // Don't fail registration if email sending fails
         console.warn("[Registration] Failed to enqueue verification email:", err);
       }
+
+      return {
+        success: true as const,
+        familyId: result.familyId,
+        adminMemberId: result.adminMemberId,
+      };
+    }),
+
+  /** Register a new family via OAuth (no password needed). */
+  registerWithOAuth: publicProcedure
+    .input(z.object({
+      familyName: z.string().min(1).max(100),
+      defaultLocale: z.enum(["en", "de"]).default("en"),
+      adminName: z.string().min(1).max(50),
+      adminPin: z.string().min(4).max(8).regex(/^\d+$/),
+      adminColor: z.string().default("#3b82f6"),
+    }))
+    .mutation(async ({ input }) => {
+      const { ipAddress } = await getRequestMeta();
+      await checkRegistrationRateLimit(ipAddress);
+
+      // Consume the OAuth pending cookie
+      const oauthData = await consumeOAuthPending();
+      if (!oauthData) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "No OAuth session found. Please try signing in again.",
+        });
+      }
+
+      const email = oauthData.email.toLowerCase();
+
+      // Check email uniqueness
+      const existingFamily = await db.family.findUnique({
+        where: { email },
+      });
+      if (existingFamily) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "EMAIL_TAKEN",
+        });
+      }
+
+      const pinHash = await bcrypt.hash(input.adminPin, 10);
+
+      const result = await db.$transaction(async (tx) => {
+        const family = await tx.family.create({
+          data: {
+            name: input.familyName,
+            email,
+            passwordHash: null,
+            emailVerified: oauthData.emailVerified,
+            defaultLocale: input.defaultLocale,
+            theme: "AUTO",
+          },
+        });
+
+        const admin = await tx.familyMember.create({
+          data: {
+            familyId: family.id,
+            name: input.adminName,
+            color: input.adminColor,
+            pinHash,
+            role: "ADMIN",
+            locale: input.defaultLocale,
+          },
+        });
+
+        await tx.memberXpProfile.create({
+          data: { memberId: admin.id },
+        });
+
+        await tx.oAuthAccount.create({
+          data: {
+            familyId: family.id,
+            provider: oauthData.provider as OAuthProvider,
+            providerAccountId: oauthData.providerAccountId,
+            email,
+            displayName: oauthData.displayName,
+          },
+        });
+
+        return { familyId: family.id, adminMemberId: admin.id };
+      });
+
+      await setAccountSession(result.familyId, false);
 
       return {
         success: true as const,
