@@ -44,10 +44,10 @@ export function ForgotPasswordPage() {
         <Card className="w-full max-w-sm text-center">
           <CardHeader>
             <Mail className="h-10 w-10 mx-auto text-primary mb-2" />
-            <CardTitle className="text-xl">{t("resetSentTitle")}</CardTitle>
+            <CardTitle className="text-xl">{t("sentTitle")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">{t("resetSentDescription")}</p>
+            <p className="text-sm text-muted-foreground">{t("sentDescription")}</p>
             <Button asChild variant="outline" className="w-full">
               <Link href="/login">{t("backToLogin")}</Link>
             </Button>
@@ -62,9 +62,9 @@ export function ForgotPasswordPage() {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <div className="text-4xl mb-2">🔑</div>
-          <CardTitle className="text-xl">{t("forgotPasswordTitle")}</CardTitle>
+          <CardTitle className="text-xl">{t("forgotTitle")}</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            {t("forgotPasswordDescription")}
+            {t("forgotDescription")}
           </p>
         </CardHeader>
         <CardContent>
