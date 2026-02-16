@@ -182,8 +182,10 @@ model Family {
   name          String
   email         String   @unique
   passwordHash  String
-  emailVerified Boolean  @default(false)
-  defaultLocale String   @default("en")
+  emailVerified    Boolean  @default(false)
+  twoFactorEnabled Boolean  @default(false)
+  twoFactorSecret  String?
+  defaultLocale    String   @default("en")
   theme         ThemeMode @default(AUTO)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -205,7 +207,8 @@ model Family {
   activityEvents     ActivityEvent[]
   loginAttempts      LoginAttempt[]
   activeSessions     ActiveSession[]
-  emailTokens        EmailToken[]
+  emailTokens             EmailToken[]
+  twoFactorRecoveryCodes  TwoFactorRecoveryCode[]
 }
 
 model FamilyMember {
@@ -852,4 +855,16 @@ model EmailToken {
 
   @@index([familyId])
   @@index([expiresAt])
+}
+
+model TwoFactorRecoveryCode {
+  id        String    @id @default(cuid())
+  familyId  String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
 }

@@ -59,3 +59,6 @@ next-env.d.ts
 
 # generated service worker (built from sw.template.js)
 /public/sw.js
+
+# claude code
+/.claude/

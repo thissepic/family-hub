@@ -10,6 +10,8 @@ import {
   resetLoginCounters,
   checkPasswordResetRateLimit,
   checkVerificationResendRateLimit,
+  checkTotpRateLimit,
+  resetTotpRateLimit,
 } from "@/lib/rate-limit";
 import { createEmailToken, validateEmailToken } from "@/lib/email/tokens";
 import {
@@ -19,6 +21,17 @@ import {
   enqueueEmailChangeVerification,
 } from "@/lib/email/queue";
 import bcrypt from "bcryptjs";
+import { createPendingToken, consumePendingToken } from "@/lib/two-factor-pending";
+import {
+  generateTotpSecret,
+  encryptTotpSecret,
+  decryptTotpSecret,
+  generateTotpUri,
+  generateQrCodeDataUrl,
+  verifyTotpCode,
+  generateRecoveryCodes,
+  matchRecoveryCode,
+} from "@/lib/two-factor";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -94,7 +107,7 @@ export const accountRouter = router({
         });
       }
 
-      // Success - reset rate limits and create account session
+      // Success - reset rate limits
       await resetLoginCounters(ipAddress, email);
       await db.loginAttempt.create({
         data: {
@@ -106,9 +119,23 @@ export const accountRouter = router({
         },
       });
 
+      // Check if 2FA is enabled
+      if (family.twoFactorEnabled && family.twoFactorSecret) {
+        const pendingToken = await createPendingToken({
+          familyId: family.id,
+          rememberMe: input.rememberMe,
+        });
+        return {
+          success: true as const,
+          familyName: family.name,
+          requiresTwoFactor: true as const,
+          twoFactorToken: pendingToken,
+        };
+      }
+
       await setAccountSession(family.id, input.rememberMe);
 
-      return { success: true, familyName: family.name };
+      return { success: true as const, familyName: family.name };
     }),
 
   /** List family members for profile selection (requires account auth). */
@@ -403,4 +430,246 @@ export const accountRouter = router({
         take: input?.limit ?? 20,
       });
     }),
+
+  // ─── Two-Factor Authentication ─────────────────────────────────────────────
+
+  /** Verify TOTP or recovery code after login (no session yet). */
+  verifyTwoFactor: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      code: z.string().min(6).max(9),
+    }))
+    .mutation(async ({ input }) => {
+      const { ipAddress } = await getRequestMeta();
+
+      try {
+        await checkTotpRateLimit(ipAddress);
+      } catch {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many verification attempts. Please try again later.",
+        });
+      }
+
+      const pending = await consumePendingToken(input.token);
+      if (!pending) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid or expired verification. Please log in again.",
+        });
+      }
+
+      const family = await db.family.findUnique({
+        where: { id: pending.familyId },
+        include: { twoFactorRecoveryCodes: true },
+      });
+
+      if (!family || !family.twoFactorSecret) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      }
+
+      const secret = decryptTotpSecret(family.twoFactorSecret);
+      const code = input.code.replace(/[-\s]/g, "");
+
+      // Try TOTP first
+      if (code.length === 6 && verifyTotpCode(code, secret)) {
+        await resetTotpRateLimit(ipAddress);
+        await setAccountSession(pending.familyId, pending.rememberMe);
+        return { success: true, usedRecoveryCode: false };
+      }
+
+      // Try recovery code
+      const matchedCodeId = await matchRecoveryCode(
+        input.code,
+        family.twoFactorRecoveryCodes
+      );
+
+      if (matchedCodeId) {
+        await db.twoFactorRecoveryCode.update({
+          where: { id: matchedCodeId },
+          data: { usedAt: new Date() },
+        });
+        await resetTotpRateLimit(ipAddress);
+        await setAccountSession(pending.familyId, pending.rememberMe);
+
+        const remaining = family.twoFactorRecoveryCodes.filter(
+          (c) => !c.usedAt && c.id !== matchedCodeId
+        ).length;
+
+        return { success: true, usedRecoveryCode: true, remainingCodes: remaining };
+      }
+
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Invalid verification code.",
+      });
+    }),
+
+  /** Start 2FA setup: generate secret and QR code (admin only). */
+  setupTwoFactor: adminProcedure.mutation(async ({ ctx }) => {
+    const family = await db.family.findUnique({
+      where: { id: ctx.session.familyId },
+    });
+
+    if (!family) throw new TRPCError({ code: "NOT_FOUND" });
+
+    if (!family.emailVerified) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "Email must be verified before enabling 2FA.",
+      });
+    }
+
+    if (family.twoFactorEnabled) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Two-factor authentication is already enabled.",
+      });
+    }
+
+    const secret = generateTotpSecret();
+    const otpauthUri = generateTotpUri(secret, family.email);
+    const qrCodeDataUrl = await generateQrCodeDataUrl(otpauthUri);
+
+    // Store encrypted secret (not enabled yet — enabled on confirm)
+    await db.family.update({
+      where: { id: family.id },
+      data: { twoFactorSecret: encryptTotpSecret(secret) },
+    });
+
+    return { secret, qrCodeDataUrl };
+  }),
+
+  /** Confirm 2FA setup: verify TOTP code and generate recovery codes (admin only). */
+  confirmTwoFactor: adminProcedure
+    .input(z.object({ code: z.string().length(6) }))
+    .mutation(async ({ ctx, input }) => {
+      const family = await db.family.findUnique({
+        where: { id: ctx.session.familyId },
+      });
+
+      if (!family || !family.twoFactorSecret) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No 2FA setup in progress." });
+      }
+
+      if (family.twoFactorEnabled) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "2FA is already enabled." });
+      }
+
+      const secret = decryptTotpSecret(family.twoFactorSecret);
+      if (!verifyTotpCode(input.code, secret)) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Invalid code. Please try again.",
+        });
+      }
+
+      const { plain, hashed } = await generateRecoveryCodes();
+
+      await db.$transaction(async (tx) => {
+        await tx.family.update({
+          where: { id: family.id },
+          data: { twoFactorEnabled: true },
+        });
+
+        await tx.twoFactorRecoveryCode.createMany({
+          data: hashed.map((codeHash) => ({
+            familyId: family.id,
+            codeHash,
+          })),
+        });
+      });
+
+      return { recoveryCodes: plain };
+    }),
+
+  /** Disable 2FA (admin only). Requires valid TOTP code. */
+  disableTwoFactor: adminProcedure
+    .input(z.object({ code: z.string().length(6) }))
+    .mutation(async ({ ctx, input }) => {
+      const family = await db.family.findUnique({
+        where: { id: ctx.session.familyId },
+      });
+
+      if (!family || !family.twoFactorEnabled || !family.twoFactorSecret) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "2FA is not enabled." });
+      }
+
+      const secret = decryptTotpSecret(family.twoFactorSecret);
+      if (!verifyTotpCode(input.code, secret)) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Invalid code.",
+        });
+      }
+
+      await db.$transaction(async (tx) => {
+        await tx.family.update({
+          where: { id: family.id },
+          data: { twoFactorEnabled: false, twoFactorSecret: null },
+        });
+
+        await tx.twoFactorRecoveryCode.deleteMany({
+          where: { familyId: family.id },
+        });
+      });
+
+      return { success: true };
+    }),
+
+  /** Regenerate recovery codes (admin only). Requires valid TOTP code. */
+  regenerateRecoveryCodes: adminProcedure
+    .input(z.object({ code: z.string().length(6) }))
+    .mutation(async ({ ctx, input }) => {
+      const family = await db.family.findUnique({
+        where: { id: ctx.session.familyId },
+      });
+
+      if (!family || !family.twoFactorEnabled || !family.twoFactorSecret) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "2FA is not enabled." });
+      }
+
+      const secret = decryptTotpSecret(family.twoFactorSecret);
+      if (!verifyTotpCode(input.code, secret)) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid code." });
+      }
+
+      const { plain, hashed } = await generateRecoveryCodes();
+
+      await db.$transaction(async (tx) => {
+        await tx.twoFactorRecoveryCode.deleteMany({
+          where: { familyId: family.id },
+        });
+
+        await tx.twoFactorRecoveryCode.createMany({
+          data: hashed.map((codeHash) => ({
+            familyId: family.id,
+            codeHash,
+          })),
+        });
+      });
+
+      return { recoveryCodes: plain };
+    }),
+
+  /** Get 2FA status (admin only). */
+  getTwoFactorStatus: adminProcedure.query(async ({ ctx }) => {
+    const family = await db.family.findUnique({
+      where: { id: ctx.session.familyId },
+      include: {
+        twoFactorRecoveryCodes: {
+          select: { id: true, usedAt: true },
+        },
+      },
+    });
+
+    if (!family) throw new TRPCError({ code: "NOT_FOUND" });
+
+    return {
+      enabled: family.twoFactorEnabled,
+      emailVerified: family.emailVerified,
+      recoveryCodesRemaining: family.twoFactorRecoveryCodes.filter((c) => !c.usedAt).length,
+      recoveryCodesTotal: family.twoFactorRecoveryCodes.length,
+    };
+  }),
 });

@@ -4,7 +4,7 @@ import { unsealData } from "iron-session";
 
 const PUBLIC_PATHS = ["/setup", "/hub", "/api", "/_next", "/favicon.ico", "/manifest.json", "/sw.js", "/offline", "/icons"];
 const AUTH_PATHS = ["/login", "/register"];
-const TOKEN_PATHS = ["/verify-email", "/reset-password", "/forgot-password"];
+const TOKEN_PATHS = ["/verify-email", "/reset-password", "/forgot-password", "/verify-2fa"];
 const ACCOUNT_PATHS = ["/profiles"];
 
 interface UnsealedSession {

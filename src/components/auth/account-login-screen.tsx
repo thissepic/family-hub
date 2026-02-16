@@ -25,7 +25,11 @@ export function AccountLoginScreen() {
 
   const loginMutation = useMutation(
     trpc.account.login.mutationOptions({
-      onSuccess: () => {
+      onSuccess: (data) => {
+        if (data.requiresTwoFactor && data.twoFactorToken) {
+          router.push(`/verify-2fa?token=${data.twoFactorToken}`);
+          return;
+        }
         router.push("/profiles");
         router.refresh();
       },

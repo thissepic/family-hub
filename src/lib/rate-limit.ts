@@ -34,6 +34,8 @@ const PASSWORD_RESET_MAX = 3;
 const PASSWORD_RESET_WINDOW_SEC = 3600; // 1 hour
 const VERIFICATION_RESEND_MAX = 3;
 const VERIFICATION_RESEND_WINDOW_SEC = 3600; // 1 hour
+const TOTP_MAX_ATTEMPTS = 5;
+const TOTP_WINDOW_SEC = 900; // 15 min
 
 let loginLimiter: RateLimiterAbstract | null = null;
 let accountLockoutLimiter: RateLimiterAbstract | null = null;
@@ -42,6 +44,7 @@ let registrationLimiter: RateLimiterAbstract | null = null;
 let pinLimiter: RateLimiterAbstract | null = null;
 let passwordResetLimiter: RateLimiterAbstract | null = null;
 let verificationResendLimiter: RateLimiterAbstract | null = null;
+let totpLimiter: RateLimiterAbstract | null = null;
 
 function getLoginLimiter(): RateLimiterAbstract {
   if (loginLimiter) return loginLimiter;
@@ -190,6 +193,27 @@ function getVerificationResendLimiter(): RateLimiterAbstract {
   return verificationResendLimiter;
 }
 
+function getTotpLimiter(): RateLimiterAbstract {
+  if (totpLimiter) return totpLimiter;
+  const redis = getRedis();
+
+  if (redis) {
+    totpLimiter = new RateLimiterRedis({
+      storeClient: redis,
+      keyPrefix: "rl:totp",
+      points: TOTP_MAX_ATTEMPTS,
+      duration: TOTP_WINDOW_SEC,
+    });
+  } else {
+    totpLimiter = new RateLimiterMemory({
+      keyPrefix: "rl:totp",
+      points: TOTP_MAX_ATTEMPTS,
+      duration: TOTP_WINDOW_SEC,
+    });
+  }
+  return totpLimiter;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /** Check if IP is rate-limited for login attempts. Throws if blocked. */
@@ -284,5 +308,23 @@ export async function checkVerificationResendRateLimit(familyId: string): Promis
     await getVerificationResendLimiter().consume(familyId);
   } catch {
     throw new Error("TOO_MANY_REQUESTS");
+  }
+}
+
+/** Check TOTP verification rate limit. Throws if blocked. */
+export async function checkTotpRateLimit(key: string): Promise<void> {
+  try {
+    await getTotpLimiter().consume(key);
+  } catch {
+    throw new Error("TOO_MANY_TOTP_ATTEMPTS");
+  }
+}
+
+/** Reset TOTP rate limit counter on success. */
+export async function resetTotpRateLimit(key: string): Promise<void> {
+  try {
+    await getTotpLimiter().delete(key);
+  } catch {
+    // Non-critical, ignore
   }
 }
