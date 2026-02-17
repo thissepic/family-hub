@@ -15,7 +15,7 @@ function getRedis(): IORedis {
 }
 
 interface PendingData {
-  familyId: string;
+  userId: string;
   rememberMe: boolean;
 }
 

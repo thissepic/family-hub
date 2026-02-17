@@ -1,20 +1,18 @@
 import { redirect } from "next/navigation";
-import { getSession, isFullSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getSession, isFullSession, isFamilySession } from "@/lib/auth";
 import { ProfileSelectionScreen } from "@/components/auth/profile-selection-screen";
 
 export default async function ProfilesPage() {
-  // If no family exists, redirect to setup
-  const familyCount = await db.family.count();
-  if (familyCount === 0) {
-    redirect("/setup");
-  }
-
   const session = await getSession();
 
-  // No account session → login first
-  if (!session?.familyId) {
+  // No user session → login first
+  if (!session?.userId) {
     redirect("/login");
+  }
+
+  // No family selected → go to family selector
+  if (!isFamilySession(session)) {
+    redirect("/families");
   }
 
   // Already have a full session → go to dashboard

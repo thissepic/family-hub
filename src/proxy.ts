@@ -4,10 +4,12 @@ import { unsealData } from "iron-session";
 
 const PUBLIC_PATHS = ["/setup", "/hub", "/api", "/_next", "/favicon.ico", "/manifest.json", "/sw.js", "/offline", "/icons"];
 const AUTH_PATHS = ["/login", "/register"];
-const TOKEN_PATHS = ["/verify-email", "/reset-password", "/forgot-password", "/verify-2fa"];
-const ACCOUNT_PATHS = ["/profiles"];
+const TOKEN_PATHS = ["/verify-email", "/reset-password", "/forgot-password", "/verify-2fa", "/invite"];
+const USER_PATHS = ["/families", "/create-family", "/account"];
+const FAMILY_PATHS = ["/profiles"];
 
 interface UnsealedSession {
+  userId?: string;
   familyId?: string;
   memberId?: string;
 }
@@ -34,7 +36,7 @@ export async function proxy(request: NextRequest) {
       const unsealed = await unsealData(sessionCookie, {
         password: process.env.SESSION_SECRET!,
       });
-      if (unsealed && typeof unsealed === "object" && "familyId" in unsealed) {
+      if (unsealed && typeof unsealed === "object" && "userId" in unsealed) {
         session = unsealed as UnsealedSession;
       }
     } catch {
@@ -42,26 +44,40 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Token-based paths (verify-email, reset-password, forgot-password): always accessible
+  // Token-based paths (verify-email, reset-password, invite, etc.): always accessible
   if (TOKEN_PATHS.some((path) => pathname.startsWith(path))) {
     return NextResponse.next();
   }
 
   // Auth paths (login/register): redirect logged-in users away
   if (AUTH_PATHS.some((path) => pathname.startsWith(path))) {
-    if (session?.memberId) {
-      return NextResponse.redirect(redirectUrl("/", request));
-    }
-    if (session?.familyId) {
-      return NextResponse.redirect(redirectUrl("/profiles", request));
+    if (session?.userId) {
+      if (session.memberId) {
+        return NextResponse.redirect(redirectUrl("/", request));
+      }
+      if (session.familyId) {
+        return NextResponse.redirect(redirectUrl("/profiles", request));
+      }
+      return NextResponse.redirect(redirectUrl("/families", request));
     }
     return NextResponse.next();
   }
 
-  // Account-only paths (e.g. /profiles): require account session
-  if (ACCOUNT_PATHS.some((path) => pathname.startsWith(path))) {
-    if (!session?.familyId) {
+  // User-level paths (families, create-family, account): require userId only
+  if (USER_PATHS.some((path) => pathname.startsWith(path))) {
+    if (!session?.userId) {
       return NextResponse.redirect(redirectUrl("/login", request));
+    }
+    return NextResponse.next();
+  }
+
+  // Family-level paths (profiles): require userId + familyId
+  if (FAMILY_PATHS.some((path) => pathname.startsWith(path))) {
+    if (!session?.userId) {
+      return NextResponse.redirect(redirectUrl("/login", request));
+    }
+    if (!session.familyId) {
+      return NextResponse.redirect(redirectUrl("/families", request));
     }
     // If already fully authenticated, redirect to dashboard
     if (session.memberId) {
@@ -70,13 +86,16 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Protected paths: require full session (account + profile)
-  if (!session?.familyId) {
+  // Protected paths: require full session (user + family + profile)
+  if (!session?.userId) {
     return NextResponse.redirect(redirectUrl("/login", request));
   }
 
+  if (!session.familyId) {
+    return NextResponse.redirect(redirectUrl("/families", request));
+  }
+
   if (!session.memberId) {
-    // Has account session but no profile → go to profile selection
     return NextResponse.redirect(redirectUrl("/profiles", request));
   }
 

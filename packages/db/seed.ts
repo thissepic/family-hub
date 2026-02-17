@@ -36,16 +36,32 @@ async function main() {
   await prisma.externalCalendar.deleteMany();
   await prisma.externalCalendarConnection.deleteMany();
   await prisma.hubDisplaySettings.deleteMany();
+  await prisma.familyInvitation.deleteMany();
   await prisma.familyMember.deleteMany();
+  await prisma.oAuthAccount.deleteMany();
+  await prisma.emailToken.deleteMany();
+  await prisma.twoFactorRecoveryCode.deleteMany();
+  await prisma.loginAttempt.deleteMany();
+  await prisma.activeSession.deleteMany();
+  await prisma.emailPreference.deleteMany();
   await prisma.family.deleteMany();
+  await prisma.user.deleteMany();
+
+  // Create demo user account
+  const accountPasswordHash = await bcrypt.hash("password123", 10);
+  const demoUser = await prisma.user.create({
+    data: {
+      email: "demo@familyhub.local",
+      passwordHash: accountPasswordHash,
+      emailVerified: true,
+      defaultLocale: "en",
+    },
+  });
 
   // Create demo family
-  const accountPasswordHash = await bcrypt.hash("password123", 10);
   const family = await prisma.family.create({
     data: {
       name: "The Millers",
-      email: "demo@familyhub.local",
-      passwordHash: accountPasswordHash,
       defaultLocale: "en",
       theme: "AUTO",
     },
@@ -57,6 +73,7 @@ async function main() {
   const mom = await prisma.familyMember.create({
     data: {
       familyId: family.id,
+      userId: demoUser.id,
       name: "Sarah",
       color: "#ec4899",
       pinHash,
@@ -1314,8 +1331,10 @@ async function main() {
   });
 
   console.log("Seed complete!");
+  console.log(`User: ${demoUser.email} (ID: ${demoUser.id})`);
   console.log(`Family: ${family.name} (ID: ${family.id})`);
   console.log(`Members: ${allMembers.map((m) => m.name).join(", ")}`);
+  console.log("Login: demo@familyhub.local / password123");
   console.log("All PINs: 1234");
   console.log("Tasks: 7 created, 3 completions seeded");
   console.log("Chores: 6 created, 4 instances, 1 swap request seeded");

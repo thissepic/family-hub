@@ -1,7 +1,8 @@
 import { z } from "zod/v4";
 import { TRPCError } from "@trpc/server";
-import { router, protectedProcedure, adminProcedure } from "../init";
+import { router, protectedProcedure, adminProcedure, userProcedure } from "../init";
 import { db } from "@/lib/db";
+import { checkPinRateLimit, resetPinRateLimit } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
 
 export const membersRouter = router({
@@ -16,6 +17,7 @@ export const membersRouter = router({
         role: true,
         locale: true,
         themePreference: true,
+        userId: true,
         createdAt: true,
       },
       orderBy: { createdAt: "asc" },
@@ -54,22 +56,52 @@ export const membersRouter = router({
       });
     }),
 
+  /** Admin creates a new member profile (optionally linked to an existing user by email). */
   adminCreate: adminProcedure
     .input(z.object({
       name: z.string().min(1).max(50),
       avatar: z.string().optional(),
       color: z.string().default("#3b82f6"),
-      pin: z.string().min(4).max(8),
+      pin: z.string().min(4).max(8).optional(),
       role: z.enum(["ADMIN", "MEMBER"]).default("MEMBER"),
       locale: z.enum(["en", "de"]).nullable().optional(),
+      email: z.string().email().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const pinHash = await bcrypt.hash(input.pin, 10);
+      let userId: string | undefined;
+
+      // If email is provided, try to link to an existing user
+      if (input.email) {
+        const existingUser = await db.user.findUnique({
+          where: { email: input.email.toLowerCase() },
+          select: { id: true },
+        });
+
+        if (existingUser) {
+          // Check if user is already a member of this family
+          const existingMember = await db.familyMember.findUnique({
+            where: { familyId_userId: { familyId: ctx.session.familyId, userId: existingUser.id } },
+          });
+          if (existingMember) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "This user is already a member of this family",
+            });
+          }
+          userId = existingUser.id;
+        }
+      }
+
+      // PIN is required for unlinked profiles, optional for linked ones
+      const pinHash = input.pin
+        ? await bcrypt.hash(input.pin, 10)
+        : null;
 
       return db.$transaction(async (tx) => {
         const member = await tx.familyMember.create({
           data: {
             familyId: ctx.session.familyId,
+            userId,
             name: input.name,
             avatar: input.avatar,
             color: input.color,
@@ -84,6 +116,75 @@ export const membersRouter = router({
         });
 
         return member;
+      });
+    }),
+
+  /**
+   * Link an unlinked profile to the current user.
+   * The user must verify the member's PIN to claim it.
+   */
+  linkProfile: userProcedure
+    .input(z.object({
+      memberId: z.string(),
+      familyId: z.string(),
+      pin: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const member = await db.familyMember.findUnique({
+        where: { id: input.memberId },
+      });
+
+      if (!member || member.familyId !== input.familyId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Member not found" });
+      }
+
+      // Can only link unlinked profiles
+      if (member.userId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This profile is already linked to a user",
+        });
+      }
+
+      // Check if user already has a member in this family
+      const existingMember = await db.familyMember.findUnique({
+        where: { familyId_userId: { familyId: input.familyId, userId: ctx.session.userId } },
+      });
+      if (existingMember) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "You already have a profile in this family",
+        });
+      }
+
+      // Verify PIN if the member has one set
+      if (member.pinHash) {
+        if (!input.pin) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "PIN required to claim this profile" });
+        }
+
+        const pinRateLimitKey = `${input.familyId}:${input.memberId}`;
+        try {
+          await checkPinRateLimit(pinRateLimitKey);
+        } catch {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: "Too many PIN attempts. Please try again later.",
+          });
+        }
+
+        const valid = await bcrypt.compare(input.pin, member.pinHash);
+        if (!valid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid PIN" });
+        }
+
+        await resetPinRateLimit(pinRateLimitKey);
+      }
+
+      // Link the profile
+      return db.familyMember.update({
+        where: { id: input.memberId },
+        data: { userId: ctx.session.userId },
       });
     }),
 
@@ -194,7 +295,7 @@ export const membersRouter = router({
       }
 
       // Admins can skip current PIN check for other members
-      if (ctx.session.memberId === input.memberId) {
+      if (ctx.session.memberId === input.memberId && member.pinHash) {
         const valid = await bcrypt.compare(input.currentPin, member.pinHash);
         if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid current PIN" });
       }

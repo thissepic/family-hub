@@ -30,7 +30,7 @@ export function TwoFactorVerifyScreen({ token }: { token: string }) {
             t("recoveryCodeWarning", { count: data.remainingCodes })
           );
         }
-        router.push("/profiles");
+        router.push("/families");
         router.refresh();
       },
       onError: (err) => {

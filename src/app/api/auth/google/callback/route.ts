@@ -62,18 +62,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Process the OAuth callback
-    const result = await processOAuthCallback(userInfo, stateData.familyId);
+    const result = await processOAuthCallback(userInfo, stateData.userId);
 
     if (result.action === "login" || result.action === "link_and_login") {
-      // If linking from settings, redirect back to settings
-      if (stateData.familyId) {
+      // If linking from account settings, redirect back to account settings
+      if (stateData.userId) {
         return NextResponse.redirect(
-          new URL("/settings?tab=security&linked=google", appUrl)
+          new URL("/account?linked=google", appUrl)
         );
       }
 
-      await handleOAuthLogin(result.familyId, userInfo.email);
-      return NextResponse.redirect(new URL("/profiles", appUrl));
+      await handleOAuthLogin(result.userId, userInfo.email);
+      return NextResponse.redirect(new URL("/families", appUrl));
     }
 
     // New user → store pending data and redirect to registration

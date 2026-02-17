@@ -37,14 +37,14 @@ function getQueue(): Queue {
 export async function enqueueVerificationEmail(
   email: string,
   locale: string,
-  familyName: string,
+  displayName: string,
   verifyUrl: string,
 ): Promise<void> {
   await getQueue().add("send-email", {
     type: "verification",
     email,
     locale,
-    familyName,
+    familyName: displayName,
     verifyUrl,
   });
 }
@@ -52,31 +52,31 @@ export async function enqueueVerificationEmail(
 export async function enqueuePasswordResetEmail(
   email: string,
   locale: string,
-  familyName: string,
+  displayName: string,
   resetUrl: string,
 ): Promise<void> {
   await getQueue().add("send-email", {
     type: "password-reset",
     email,
     locale,
-    familyName,
+    familyName: displayName,
     resetUrl,
   });
 }
 
 export async function enqueueEmailChangeNotification(
-  familyId: string,
+  userId: string,
   oldEmail: string,
   newEmail: string,
-  familyName: string,
+  displayName: string,
   locale: string,
 ): Promise<void> {
-  if (!(await isEmailEnabled(familyId, "EMAIL_CHANGE_NOTIFICATION"))) return;
+  if (!(await isEmailEnabled(userId, "EMAIL_CHANGE_NOTIFICATION"))) return;
   await getQueue().add("send-email", {
     type: "email-change-notification",
     email: oldEmail,
     locale,
-    familyName,
+    familyName: displayName,
     oldEmail,
     newEmail,
   });
@@ -85,14 +85,14 @@ export async function enqueueEmailChangeNotification(
 export async function enqueueEmailChangeVerification(
   email: string,
   locale: string,
-  familyName: string,
+  displayName: string,
   verifyUrl: string,
 ): Promise<void> {
   await getQueue().add("send-email", {
     type: "email-change-verification",
     email,
     locale,
-    familyName,
+    familyName: displayName,
     verifyUrl,
   });
 }
@@ -100,11 +100,11 @@ export async function enqueueEmailChangeVerification(
 // ─── Preference check ─────────────────────────────────────────────────────
 
 async function isEmailEnabled(
-  familyId: string,
+  userId: string,
   type: EmailNotificationType,
 ): Promise<boolean> {
   const pref = await db.emailPreference.findUnique({
-    where: { familyId_type: { familyId, type } },
+    where: { userId_type: { userId, type } },
   });
   return pref?.enabled ?? true;
 }
@@ -112,70 +112,89 @@ async function isEmailEnabled(
 // ─── Security notification enqueue helpers ────────────────────────────────
 
 export async function enqueueTwoFactorEnabledEmail(
-  familyId: string,
+  userId: string,
   email: string,
   locale: string,
-  familyName: string,
+  displayName: string,
 ): Promise<void> {
-  if (!(await isEmailEnabled(familyId, "TWO_FACTOR_ENABLED"))) return;
+  if (!(await isEmailEnabled(userId, "TWO_FACTOR_ENABLED"))) return;
   await getQueue().add("send-email", {
     type: "two-factor-enabled",
     email,
     locale,
-    familyName,
+    familyName: displayName,
   });
 }
 
 export async function enqueueTwoFactorDisabledEmail(
-  familyId: string,
+  userId: string,
   email: string,
   locale: string,
-  familyName: string,
+  displayName: string,
 ): Promise<void> {
-  if (!(await isEmailEnabled(familyId, "TWO_FACTOR_DISABLED"))) return;
+  if (!(await isEmailEnabled(userId, "TWO_FACTOR_DISABLED"))) return;
   await getQueue().add("send-email", {
     type: "two-factor-disabled",
     email,
     locale,
-    familyName,
+    familyName: displayName,
   });
 }
 
 export async function enqueueOAuthLinkedEmail(
-  familyId: string,
+  userId: string,
   email: string,
   locale: string,
-  familyName: string,
+  displayName: string,
   provider: string,
   providerEmail: string,
 ): Promise<void> {
-  if (!(await isEmailEnabled(familyId, "OAUTH_LINKED"))) return;
+  if (!(await isEmailEnabled(userId, "OAUTH_LINKED"))) return;
   await getQueue().add("send-email", {
     type: "oauth-linked",
     email,
     locale,
-    familyName,
+    familyName: displayName,
     provider,
     providerEmail,
   });
 }
 
 export async function enqueueOAuthUnlinkedEmail(
-  familyId: string,
+  userId: string,
   email: string,
   locale: string,
-  familyName: string,
+  displayName: string,
   provider: string,
   providerEmail: string,
 ): Promise<void> {
-  if (!(await isEmailEnabled(familyId, "OAUTH_UNLINKED"))) return;
+  if (!(await isEmailEnabled(userId, "OAUTH_UNLINKED"))) return;
   await getQueue().add("send-email", {
     type: "oauth-unlinked",
     email,
     locale,
-    familyName,
+    familyName: displayName,
     provider,
     providerEmail,
+  });
+}
+
+export async function enqueueInvitationEmail(
+  email: string,
+  locale: string,
+  familyName: string,
+  inviterName: string,
+  inviteUrl: string,
+  expiresAt: string,
+): Promise<void> {
+  await getQueue().add("send-email", {
+    type: "invitation",
+    email,
+    locale,
+    familyName,
+    inviterName,
+    inviteUrl,
+    expiresAt,
   });
 }
 

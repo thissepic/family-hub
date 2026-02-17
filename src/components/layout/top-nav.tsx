@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search, LogOut, User, ArrowLeftRight } from "lucide-react";
+import { Bell, Search, LogOut, User, ArrowLeftRight, Home, Shield } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,6 +36,16 @@ export function TopNav({ onSearchOpen, memberName, memberColor, memberAvatar }: 
       onSuccess: () => {
         queryClient.clear();
         router.push("/profiles");
+        router.refresh();
+      },
+    })
+  );
+
+  const switchFamilyMutation = useMutation(
+    trpc.auth.switchFamily.mutationOptions({
+      onSuccess: () => {
+        queryClient.clear();
+        router.push("/families");
         router.refresh();
       },
     })
@@ -113,10 +123,18 @@ export function TopNav({ onSearchOpen, memberName, memberColor, memberAvatar }: 
             <User className="mr-2 h-4 w-4" />
             {t("settings")}
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/account")}>
+            <Shield className="mr-2 h-4 w-4" />
+            {t("accountSettings")}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => switchProfileMutation.mutate()}>
             <ArrowLeftRight className="mr-2 h-4 w-4" />
             {tAuth("switchProfile")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => switchFamilyMutation.mutate()}>
+            <Home className="mr-2 h-4 w-4" />
+            {tAuth("switchFamily")}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => logoutMutation.mutate()}>
             <LogOut className="mr-2 h-4 w-4" />

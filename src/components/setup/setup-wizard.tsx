@@ -38,22 +38,21 @@ export function SetupWizard() {
   const [adminName, setAdminName] = useState("");
   const [adminColor, setAdminColor] = useState("#3b82f6");
   const [adminPin, setAdminPin] = useState("");
-  // Registered state: after family.register completes, we have an account session
-  const [registeredAdminId, setRegisteredAdminId] = useState<string | null>(null);
+  // Registered state
   const [isFullyAuthenticated, setIsFullyAuthenticated] = useState(false);
   // Additional members (beyond the first admin)
   const [additionalMembers, setAdditionalMembers] = useState<MemberInput[]>([]);
 
-  const registerFamilyMutation = useMutation(
-    trpc.family.register.mutationOptions({
-      onSuccess: (result) => {
-        setRegisteredAdminId(result.adminMemberId);
-      },
-    })
+  const registerUserMutation = useMutation(
+    trpc.family.registerUser.mutationOptions()
   );
 
-  const selectProfileMutation = useMutation(
-    trpc.auth.selectProfile.mutationOptions({
+  const createFamilyMutation = useMutation(
+    trpc.family.createFamily.mutationOptions()
+  );
+
+  const selectFamilyMutation = useMutation(
+    trpc.auth.selectFamily.mutationOptions({
       onSuccess: () => {
         setIsFullyAuthenticated(true);
         setCurrentStep(2);
@@ -75,9 +74,15 @@ export function SetupWizard() {
     if (!familyName.trim() || !adminName.trim() || adminPin.length < 4) return;
 
     try {
-      const result = await registerFamilyMutation.mutateAsync({
+      // Step 1: Register the user account
+      await registerUserMutation.mutateAsync({
         email: accountEmail,
         password: accountPassword,
+        defaultLocale,
+      });
+
+      // Step 2: Create the family + admin member (now authenticated as user)
+      const familyResult = await createFamilyMutation.mutateAsync({
         familyName: familyName.trim(),
         defaultLocale,
         adminName: adminName.trim(),
@@ -85,10 +90,9 @@ export function SetupWizard() {
         adminColor,
       });
 
-      // Auto-login: select the admin profile to get a full session
-      await selectProfileMutation.mutateAsync({
-        memberId: result.adminMemberId,
-        pin: adminPin,
+      // Step 3: Select the family to get a full session (auto-resolves member)
+      await selectFamilyMutation.mutateAsync({
+        familyId: familyResult.familyId,
       });
     } catch {
       // Error is shown via mutation state
@@ -284,9 +288,9 @@ export function SetupWizard() {
                 </div>
               </div>
 
-              {registerFamilyMutation.isError && (
+              {(registerUserMutation.isError || createFamilyMutation.isError) && (
                 <p className="text-sm text-destructive text-center">
-                  {registerFamilyMutation.error?.message === "EMAIL_TAKEN"
+                  {registerUserMutation.error?.message === "EMAIL_TAKEN"
                     ? t("emailTaken")
                     : tCommon("error")}
                 </p>
@@ -306,8 +310,9 @@ export function SetupWizard() {
                     !familyName.trim() ||
                     !adminName.trim() ||
                     adminPin.length < 4 ||
-                    registerFamilyMutation.isPending ||
-                    selectProfileMutation.isPending
+                    registerUserMutation.isPending ||
+                    createFamilyMutation.isPending ||
+                    selectFamilyMutation.isPending
                   }
                   className="flex-1"
                 >

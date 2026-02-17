@@ -359,9 +359,9 @@ export async function checkPasswordResetRateLimit(email: string): Promise<void> 
 }
 
 /** Check rate limit for verification email resend. Throws if blocked. */
-export async function checkVerificationResendRateLimit(familyId: string): Promise<void> {
+export async function checkVerificationResendRateLimit(userId: string): Promise<void> {
   try {
-    await getVerificationResendLimiter().consume(familyId);
+    await getVerificationResendLimiter().consume(userId);
   } catch {
     throw new Error("TOO_MANY_REQUESTS");
   }

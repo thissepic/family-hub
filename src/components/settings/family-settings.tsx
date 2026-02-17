@@ -35,8 +35,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Save, Trash2, Users, Settings, Plus, Pencil, Shield, Mail } from "lucide-react";
+import { Loader2, Save, Trash2, Users, Settings, Plus, Pencil } from "lucide-react";
 import { MemberDialog } from "./member-dialog";
+import { InvitationsPanel } from "./invitations-panel";
 
 export function FamilySettings() {
   const t = useTranslations("settings");
@@ -62,13 +63,6 @@ export function FamilySettings() {
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
 
-  // Password reset state
-  const [passwordResetSent, setPasswordResetSent] = useState(false);
-
-  // Change Email state
-  const [newEmail, setNewEmail] = useState("");
-  const [emailPassword, setEmailPassword] = useState("");
-
   // Delete state
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -91,38 +85,11 @@ export function FamilySettings() {
     })
   );
 
-  const requestPasswordChangeMutation = useMutation(
-    trpc.account.requestPasswordChange.mutationOptions({
-      onSuccess: () => {
-        toast.success(t("passwordResetSent"));
-        setPasswordResetSent(true);
-        setTimeout(() => setPasswordResetSent(false), 30000);
-      },
-      onError: (err) => {
-        toast.error(err.message);
-      },
-    })
-  );
-
-  const changeEmailMutation = useMutation(
-    trpc.account.changeEmail.mutationOptions({
-      onSuccess: () => {
-        toast.success(t("emailChangedSuccess"));
-        setNewEmail("");
-        setEmailPassword("");
-        queryClient.invalidateQueries({ queryKey: [["family"]] });
-      },
-      onError: (err) => {
-        toast.error(err.message);
-      },
-    })
-  );
-
   const deleteFamilyMutation = useMutation(
     trpc.family.deleteFamily.mutationOptions({
       onSuccess: () => {
         toast.success(t("familyDeleted"));
-        router.push("/login");
+        router.push("/families");
       },
       onError: (err) => {
         toast.error(err.message);
@@ -166,14 +133,6 @@ export function FamilySettings() {
         },
       }
     );
-  };
-
-  const handleChangeEmail = () => {
-    if (!newEmail.trim() || !emailPassword) return;
-    changeEmailMutation.mutate({
-      newEmail: newEmail.trim(),
-      password: emailPassword,
-    });
   };
 
   const handleDeleteFamily = () => {
@@ -314,88 +273,8 @@ export function FamilySettings() {
         currentMemberId={session?.memberId}
       />
 
-      {/* Change Password */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            {t("changePassword")}
-          </CardTitle>
-          <CardDescription>{t("changePasswordEmailDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            {t("changePasswordEmailHint")}
-          </p>
-          <Button
-            onClick={() => requestPasswordChangeMutation.mutate()}
-            disabled={requestPasswordChangeMutation.isPending || passwordResetSent}
-          >
-            {requestPasswordChangeMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
-            {passwordResetSent ? t("passwordResetSentButton") : t("requestPasswordReset")}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Change Email */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            {t("changeEmail")}
-          </CardTitle>
-          <CardDescription>{t("changeEmailDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>{t("currentEmail")}</Label>
-            <p className="text-sm text-muted-foreground">{family.email}</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-email">{t("newEmail")}</Label>
-            <Input
-              id="new-email"
-              type="email"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              placeholder="new@email.com"
-              className="max-w-sm"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email-password">{t("verifyPassword")}</Label>
-            <Input
-              id="email-password"
-              type="password"
-              value={emailPassword}
-              onChange={(e) => setEmailPassword(e.target.value)}
-              placeholder="********"
-              className="max-w-sm"
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("verifyPasswordDescription")}
-            </p>
-          </div>
-          <Button
-            onClick={handleChangeEmail}
-            disabled={
-              changeEmailMutation.isPending ||
-              !newEmail.trim() ||
-              !emailPassword
-            }
-          >
-            {changeEmailMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
-            {t("changeEmail")}
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            {t("emailChangeNotice")}
-          </p>
-        </CardContent>
-      </Card>
+      {/* Invitations */}
+      <InvitationsPanel />
 
       {/* Danger Zone */}
       <Card className="border-destructive/50">

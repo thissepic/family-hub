@@ -19,7 +19,11 @@ export function ProfileSelectionScreen() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
 
-  const { data } = useQuery(trpc.account.listMembers.queryOptions());
+  // Fetch members for the current family (requires family-level session)
+  const { data: members = [] } = useQuery(trpc.members.list.queryOptions());
+
+  // Fetch family info
+  const { data: family } = useQuery(trpc.family.get.queryOptions());
 
   const selectProfileMutation = useMutation(
     trpc.auth.selectProfile.mutationOptions({
@@ -35,6 +39,16 @@ export function ProfileSelectionScreen() {
     })
   );
 
+  const switchFamilyMutation = useMutation(
+    trpc.auth.switchFamily.mutationOptions({
+      onSuccess: () => {
+        queryClient.clear();
+        router.push("/families");
+        router.refresh();
+      },
+    })
+  );
+
   const logoutMutation = useMutation(
     trpc.auth.logout.mutationOptions({
       onSuccess: () => {
@@ -45,8 +59,7 @@ export function ProfileSelectionScreen() {
     })
   );
 
-  const members = data?.members || [];
-  const selectedMemberData = members.find((m) => m.id === selectedMember);
+  const selectedMemberData = members.find((m: { id: string }) => m.id === selectedMember);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,7 +77,7 @@ export function ProfileSelectionScreen() {
         <CardHeader className="text-center">
           <div className="text-4xl mb-2">🏠</div>
           <CardTitle className="text-xl">
-            {data?.family?.name || "Family Hub"}
+            {family?.name || "Family Hub"}
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
             {t("selectProfile")}
@@ -74,7 +87,7 @@ export function ProfileSelectionScreen() {
           {!selectedMember ? (
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-3">
-                {members.map((member) => (
+                {members.map((member: { id: string; name: string; color: string; avatar: string | null }) => (
                   <button
                     key={member.id}
                     onClick={() => setSelectedMember(member.id)}
@@ -88,7 +101,7 @@ export function ProfileSelectionScreen() {
                         {member.avatar ||
                           member.name
                             .split(" ")
-                            .map((n) => n[0])
+                            .map((n: string) => n[0])
                             .join("")
                             .toUpperCase()
                             .slice(0, 2)}
@@ -98,7 +111,16 @@ export function ProfileSelectionScreen() {
                   </button>
                 ))}
               </div>
-              <div className="pt-2 border-t">
+              <div className="pt-2 border-t space-y-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => switchFamilyMutation.mutate()}
+                  disabled={switchFamilyMutation.isPending}
+                >
+                  {t("switchFamily")}
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -123,7 +145,7 @@ export function ProfileSelectionScreen() {
                     {selectedMemberData?.avatar ||
                       selectedMemberData?.name
                         .split(" ")
-                        .map((n) => n[0])
+                        .map((n: string) => n[0])
                         .join("")
                         .toUpperCase()
                         .slice(0, 2)}

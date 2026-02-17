@@ -1,8 +1,8 @@
 import { z } from "zod/v4";
 import { TRPCError } from "@trpc/server";
-import { router, publicProcedure, protectedProcedure, adminProcedure } from "../init";
+import { router, publicProcedure, userProcedure, familyProcedure, adminProcedure } from "../init";
 import { db } from "@/lib/db";
-import { clearSession, setAccountSession, getRequestMeta } from "@/lib/auth";
+import { clearSession, setUserSession, downgradeToUser, getRequestMeta } from "@/lib/auth";
 import { checkRegistrationRateLimit } from "@/lib/rate-limit";
 import { createEmailToken } from "@/lib/email/tokens";
 import { enqueueVerificationEmail } from "@/lib/email/queue";
@@ -13,7 +13,8 @@ import bcrypt from "bcryptjs";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export const familyRouter = router({
-  get: protectedProcedure.query(async ({ ctx }) => {
+  /** Get current family details with members. Requires family-level session. */
+  get: familyProcedure.query(async ({ ctx }) => {
     return db.family.findUnique({
       where: { id: ctx.session.familyId },
       include: {
@@ -25,6 +26,7 @@ export const familyRouter = router({
             color: true,
             role: true,
             locale: true,
+            userId: true,
             createdAt: true,
           },
           orderBy: { createdAt: "asc" },
@@ -33,15 +35,12 @@ export const familyRouter = router({
     });
   }),
 
-  register: publicProcedure
+  /** Register a new user account (email + password). No family created yet. */
+  registerUser: publicProcedure
     .input(z.object({
       email: z.string().email(),
       password: z.string().min(8).max(128),
-      familyName: z.string().min(1).max(100),
       defaultLocale: z.enum(["en", "de"]).default("en"),
-      adminName: z.string().min(1).max(50),
-      adminPin: z.string().min(4).max(8).regex(/^\d+$/),
-      adminColor: z.string().default("#3b82f6"),
     }))
     .mutation(async ({ input }) => {
       const { ipAddress } = await getRequestMeta();
@@ -49,78 +48,48 @@ export const familyRouter = router({
 
       const email = input.email.toLowerCase();
 
-      // Check email uniqueness before transaction
-      const existingFamily = await db.family.findUnique({
+      // Check email uniqueness
+      const existingUser = await db.user.findUnique({
         where: { email },
       });
-      if (existingFamily) {
+      if (existingUser) {
         throw new TRPCError({
           code: "CONFLICT",
           message: "EMAIL_TAKEN",
         });
       }
 
-      const [passwordHash, pinHash] = await Promise.all([
-        bcrypt.hash(input.password, 10),
-        bcrypt.hash(input.adminPin, 10),
-      ]);
+      const passwordHash = await bcrypt.hash(input.password, 10);
 
-      const result = await db.$transaction(async (tx) => {
-        const family = await tx.family.create({
-          data: {
-            name: input.familyName,
-            email,
-            passwordHash,
-            defaultLocale: input.defaultLocale,
-            theme: "AUTO",
-          },
-        });
-
-        const admin = await tx.familyMember.create({
-          data: {
-            familyId: family.id,
-            name: input.adminName,
-            color: input.adminColor,
-            pinHash,
-            role: "ADMIN",
-            locale: input.defaultLocale,
-          },
-        });
-
-        await tx.memberXpProfile.create({
-          data: { memberId: admin.id },
-        });
-
-        return { familyId: family.id, adminMemberId: admin.id };
+      const user = await db.user.create({
+        data: {
+          email,
+          passwordHash,
+          defaultLocale: input.defaultLocale,
+        },
       });
 
-      await setAccountSession(result.familyId, false);
+      await setUserSession(user.id, false);
 
       // Send verification email
       try {
-        const rawToken = await createEmailToken(result.familyId, "VERIFICATION");
+        const rawToken = await createEmailToken(user.id, "VERIFICATION");
         const verifyUrl = `${APP_URL}/verify-email?token=${rawToken}`;
-        await enqueueVerificationEmail(email, input.defaultLocale, input.familyName, verifyUrl);
+        await enqueueVerificationEmail(email, input.defaultLocale, email, verifyUrl);
       } catch (err) {
-        // Don't fail registration if email sending fails
         console.warn("[Registration] Failed to enqueue verification email:", err);
       }
 
       return {
         success: true as const,
-        familyId: result.familyId,
-        adminMemberId: result.adminMemberId,
+        userId: user.id,
       };
     }),
 
-  /** Register a new family via OAuth (no password needed). */
-  registerWithOAuth: publicProcedure
+  /** Register a new user account via OAuth (no password needed). */
+  registerUserWithOAuth: publicProcedure
     .input(z.object({
-      familyName: z.string().min(1).max(100),
       defaultLocale: z.enum(["en", "de"]).default("en"),
-      adminName: z.string().min(1).max(50),
-      adminPin: z.string().min(4).max(8).regex(/^\d+$/),
-      adminColor: z.string().default("#3b82f6"),
     }))
     .mutation(async ({ input }) => {
       const { ipAddress } = await getRequestMeta();
@@ -138,25 +107,64 @@ export const familyRouter = router({
       const email = oauthData.email.toLowerCase();
 
       // Check email uniqueness
-      const existingFamily = await db.family.findUnique({
+      const existingUser = await db.user.findUnique({
         where: { email },
       });
-      if (existingFamily) {
+      if (existingUser) {
         throw new TRPCError({
           code: "CONFLICT",
           message: "EMAIL_TAKEN",
         });
       }
 
-      const pinHash = await bcrypt.hash(input.adminPin, 10);
+      const user = await db.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            email,
+            emailVerified: oauthData.emailVerified,
+            defaultLocale: input.defaultLocale,
+          },
+        });
+
+        await tx.oAuthAccount.create({
+          data: {
+            userId: newUser.id,
+            provider: oauthData.provider as OAuthProvider,
+            providerAccountId: oauthData.providerAccountId,
+            email,
+            displayName: oauthData.displayName,
+          },
+        });
+
+        return newUser;
+      });
+
+      await setUserSession(user.id, false);
+
+      return {
+        success: true as const,
+        userId: user.id,
+      };
+    }),
+
+  /** Create a new family (requires logged-in user). */
+  createFamily: userProcedure
+    .input(z.object({
+      familyName: z.string().min(1).max(100),
+      defaultLocale: z.enum(["en", "de"]).default("en"),
+      adminName: z.string().min(1).max(50),
+      adminPin: z.string().min(4).max(8).regex(/^\d+$/).optional(),
+      adminColor: z.string().default("#3b82f6"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const pinHash = input.adminPin
+        ? await bcrypt.hash(input.adminPin, 10)
+        : null;
 
       const result = await db.$transaction(async (tx) => {
         const family = await tx.family.create({
           data: {
             name: input.familyName,
-            email,
-            passwordHash: null,
-            emailVerified: oauthData.emailVerified,
             defaultLocale: input.defaultLocale,
             theme: "AUTO",
           },
@@ -165,6 +173,7 @@ export const familyRouter = router({
         const admin = await tx.familyMember.create({
           data: {
             familyId: family.id,
+            userId: ctx.session.userId,
             name: input.adminName,
             color: input.adminColor,
             pinHash,
@@ -177,20 +186,8 @@ export const familyRouter = router({
           data: { memberId: admin.id },
         });
 
-        await tx.oAuthAccount.create({
-          data: {
-            familyId: family.id,
-            provider: oauthData.provider as OAuthProvider,
-            providerAccountId: oauthData.providerAccountId,
-            email,
-            displayName: oauthData.displayName,
-          },
-        });
-
         return { familyId: family.id, adminMemberId: admin.id };
       });
-
-      await setAccountSession(result.familyId, false);
 
       return {
         success: true as const,
@@ -199,6 +196,36 @@ export const familyRouter = router({
       };
     }),
 
+  /** List all families the current user belongs to. */
+  listFamilies: userProcedure.query(async ({ ctx }) => {
+    const memberships = await db.familyMember.findMany({
+      where: { userId: ctx.session.userId },
+      include: {
+        family: {
+          select: {
+            id: true,
+            name: true,
+            defaultLocale: true,
+            theme: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return memberships.map((m) => ({
+      familyId: m.family.id,
+      familyName: m.family.name,
+      defaultLocale: m.family.defaultLocale,
+      theme: m.family.theme,
+      memberName: m.name,
+      memberRole: m.role,
+      memberColor: m.color,
+      memberAvatar: m.avatar,
+    }));
+  }),
+
+  /** Update family settings. */
   update: adminProcedure
     .input(z.object({
       name: z.string().min(1).max(100).optional(),
@@ -212,6 +239,7 @@ export const familyRouter = router({
       });
     }),
 
+  /** Delete a family permanently. */
   deleteFamily: adminProcedure
     .input(z.object({
       confirmName: z.string(),
@@ -236,7 +264,8 @@ export const familyRouter = router({
         where: { id: ctx.session.familyId },
       });
 
-      await clearSession();
+      // Downgrade to user-level session (not full logout)
+      await downgradeToUser();
 
       return { deleted: true };
     }),

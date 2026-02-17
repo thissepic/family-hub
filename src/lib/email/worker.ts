@@ -10,13 +10,14 @@ import {
   twoFactorDisabledEmail,
   oauthLinkedEmail,
   oauthUnlinkedEmail,
+  invitationEmail,
 } from "./templates";
 
 type Locale = "en" | "de";
 
 interface EmailJobData {
   type: "verification" | "password-reset" | "email-change-notification" | "email-change-verification"
-    | "two-factor-enabled" | "two-factor-disabled" | "oauth-linked" | "oauth-unlinked";
+    | "two-factor-enabled" | "two-factor-disabled" | "oauth-linked" | "oauth-unlinked" | "invitation";
   email: string;
   locale: string;
   familyName: string;
@@ -26,6 +27,9 @@ interface EmailJobData {
   newEmail?: string;
   provider?: string;
   providerEmail?: string;
+  inviterName?: string;
+  inviteUrl?: string;
+  expiresAt?: string;
 }
 
 async function handleSendEmail(job: Job<EmailJobData>) {
@@ -97,6 +101,17 @@ async function handleSendEmail(job: Job<EmailJobData>) {
         familyName,
         provider: job.data.provider!,
         providerEmail: job.data.providerEmail!,
+      });
+      subject = result.subject;
+      html = result.html;
+      break;
+    }
+    case "invitation": {
+      const result = invitationEmail(locale, {
+        familyName,
+        inviterName: job.data.inviterName!,
+        inviteUrl: job.data.inviteUrl!,
+        expiresAt: job.data.expiresAt!,
       });
       subject = result.subject;
       html = result.html;

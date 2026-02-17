@@ -14,7 +14,7 @@ export function EmailVerificationBanner() {
   const [dismissed, setDismissed] = useState(false);
   const [resent, setResent] = useState(false);
 
-  const familyQuery = useQuery(trpc.family.get.queryOptions());
+  const statusQuery = useQuery(trpc.account.getTwoFactorStatus.queryOptions());
 
   const resendMutation = useMutation(
     trpc.account.resendVerification.mutationOptions({
@@ -26,7 +26,7 @@ export function EmailVerificationBanner() {
   );
 
   // Don't show if dismissed, loading, error, or already verified
-  if (dismissed || !familyQuery.data || familyQuery.data.emailVerified) {
+  if (dismissed || !statusQuery.data || statusQuery.data.emailVerified) {
     return null;
   }
 

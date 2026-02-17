@@ -1,8 +1,8 @@
 import { z } from "zod/v4";
 import { TRPCError } from "@trpc/server";
-import { router, publicProcedure, accountProcedure, adminProcedure } from "../init";
+import { router, publicProcedure, userProcedure } from "../init";
 import { db } from "@/lib/db";
-import { setAccountSession, getRequestMeta } from "@/lib/auth";
+import { setUserSession, getRequestMeta } from "@/lib/auth";
 import {
   checkLoginRateLimit,
   checkAccountLockout,
@@ -39,7 +39,7 @@ import {
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export const accountRouter = router({
-  /** Account login with email + password (Layer 1). */
+  /** Account login with email + password. */
   login: publicProcedure
     .input(z.object({
       email: z.string().email(),
@@ -69,11 +69,11 @@ export const accountRouter = router({
         });
       }
 
-      const family = await db.family.findUnique({
+      const user = await db.user.findUnique({
         where: { email },
       });
 
-      if (!family || family.passwordHash === "MIGRATION_REQUIRED") {
+      if (!user) {
         await recordFailedLogin(email);
         await db.loginAttempt.create({
           data: {
@@ -81,7 +81,7 @@ export const accountRouter = router({
             ipAddress,
             userAgent,
             success: false,
-            failureReason: !family ? "UNKNOWN_EMAIL" : "MIGRATION_REQUIRED",
+            failureReason: "UNKNOWN_EMAIL",
           },
         });
         throw new TRPCError({
@@ -91,20 +91,20 @@ export const accountRouter = router({
       }
 
       // OAuth-only account: no password set
-      if (family.passwordHash === null) {
+      if (user.passwordHash === null) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "OAUTH_ONLY_ACCOUNT",
         });
       }
 
-      const valid = await bcrypt.compare(input.password, family.passwordHash);
+      const valid = await bcrypt.compare(input.password, user.passwordHash);
 
       if (!valid) {
         await recordFailedLogin(email);
         await db.loginAttempt.create({
           data: {
-            familyId: family.id,
+            userId: user.id,
             email,
             ipAddress,
             userAgent,
@@ -122,7 +122,7 @@ export const accountRouter = router({
       await resetLoginCounters(ipAddress, email);
       await db.loginAttempt.create({
         data: {
-          familyId: family.id,
+          userId: user.id,
           email,
           ipAddress,
           userAgent,
@@ -131,50 +131,44 @@ export const accountRouter = router({
       });
 
       // Check if 2FA is enabled
-      if (family.twoFactorEnabled && family.twoFactorSecret) {
+      if (user.twoFactorEnabled && user.twoFactorSecret) {
         const pendingToken = await createPendingToken({
-          familyId: family.id,
+          userId: user.id,
           rememberMe: input.rememberMe,
         });
         return {
           success: true as const,
-          familyName: family.name,
           requiresTwoFactor: true as const,
           twoFactorToken: pendingToken,
         };
       }
 
-      await setAccountSession(family.id, input.rememberMe);
+      await setUserSession(user.id, input.rememberMe);
 
-      return { success: true as const, familyName: family.name };
+      return { success: true as const };
     }),
 
-  /** List family members for profile selection (requires account auth). */
-  listMembers: accountProcedure.query(async ({ ctx }) => {
-    const family = await db.family.findUnique({
-      where: { id: ctx.session.familyId },
+  /** List all families the current user belongs to. */
+  listFamilies: userProcedure.query(async ({ ctx }) => {
+    const members = await db.familyMember.findMany({
+      where: { userId: ctx.session.userId },
       include: {
-        members: {
-          select: {
-            id: true,
-            name: true,
-            avatar: true,
-            color: true,
-            role: true,
-          },
-          orderBy: { createdAt: "asc" },
+        family: {
+          select: { id: true, name: true, defaultLocale: true, theme: true },
         },
       },
+      orderBy: { createdAt: "asc" },
     });
 
-    if (!family) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "Family not found" });
-    }
-
-    return {
-      family: { id: family.id, name: family.name },
-      members: family.members,
-    };
+    return members.map((m) => ({
+      familyId: m.family.id,
+      familyName: m.family.name,
+      memberId: m.id,
+      memberName: m.name,
+      role: m.role,
+      avatar: m.avatar,
+      color: m.color,
+    }));
   }),
 
   /** Request a password reset email (public, from login page "forgot password"). */
@@ -193,15 +187,15 @@ export const accountRouter = router({
       }
 
       // Always return success to prevent email enumeration
-      const family = await db.family.findUnique({ where: { email } });
-      if (!family) {
+      const user = await db.user.findUnique({ where: { email } });
+      if (!user) {
         return { success: true };
       }
 
-      const rawToken = await createEmailToken(family.id, "PASSWORD_RESET");
+      const rawToken = await createEmailToken(user.id, "PASSWORD_RESET");
       const resetUrl = `${APP_URL}/reset-password?token=${rawToken}`;
 
-      await enqueuePasswordResetEmail(email, family.defaultLocale, family.name, resetUrl);
+      await enqueuePasswordResetEmail(email, user.defaultLocale, email, resetUrl);
 
       return { success: true };
     }),
@@ -226,8 +220,8 @@ export const accountRouter = router({
       const newHash = await bcrypt.hash(input.newPassword, 10);
 
       await db.$transaction(async (tx) => {
-        await tx.family.update({
-          where: { id: tokenRecord.familyId },
+        await tx.user.update({
+          where: { id: tokenRecord.userId },
           data: { passwordHash: newHash },
         });
 
@@ -238,7 +232,7 @@ export const accountRouter = router({
 
         // Invalidate all sessions to force re-login with new password
         await tx.activeSession.deleteMany({
-          where: { familyId: tokenRecord.familyId },
+          where: { userId: tokenRecord.userId },
         });
       });
 
@@ -266,8 +260,8 @@ export const accountRouter = router({
       }
 
       await db.$transaction(async (tx) => {
-        await tx.family.update({
-          where: { id: tokenRecord.familyId },
+        await tx.user.update({
+          where: { id: tokenRecord.userId },
           data: { emailVerified: true },
         });
 
@@ -280,10 +274,10 @@ export const accountRouter = router({
       return { success: true };
     }),
 
-  /** Resend verification email (requires account-level auth). */
-  resendVerification: accountProcedure.mutation(async ({ ctx }) => {
+  /** Resend verification email (requires user-level auth). */
+  resendVerification: userProcedure.mutation(async ({ ctx }) => {
     try {
-      await checkVerificationResendRateLimit(ctx.session.familyId);
+      await checkVerificationResendRateLimit(ctx.session.userId);
     } catch {
       throw new TRPCError({
         code: "TOO_MANY_REQUESTS",
@@ -291,21 +285,21 @@ export const accountRouter = router({
       });
     }
 
-    const family = await db.family.findUnique({
-      where: { id: ctx.session.familyId },
+    const user = await db.user.findUnique({
+      where: { id: ctx.session.userId },
     });
 
-    if (!family) {
+    if (!user) {
       throw new TRPCError({ code: "NOT_FOUND" });
     }
 
-    if (family.emailVerified) {
+    if (user.emailVerified) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Email is already verified." });
     }
 
     let rawToken: string;
     try {
-      rawToken = await createEmailToken(family.id, "VERIFICATION");
+      rawToken = await createEmailToken(user.id, "VERIFICATION");
     } catch (err) {
       console.error("[resendVerification] Failed to create email token:", err);
       throw new TRPCError({
@@ -317,7 +311,7 @@ export const accountRouter = router({
     const verifyUrl = `${APP_URL}/verify-email?token=${rawToken}`;
 
     try {
-      await enqueueVerificationEmail(family.email, family.defaultLocale, family.name, verifyUrl);
+      await enqueueVerificationEmail(user.email, user.defaultLocale, user.email, verifyUrl);
     } catch (err) {
       console.error("[resendVerification] Failed to enqueue verification email:", err);
       throw new TRPCError({
@@ -329,47 +323,47 @@ export const accountRouter = router({
     return { success: true };
   }),
 
-  /** Request password change email from settings (admin only). */
-  requestPasswordChange: adminProcedure.mutation(async ({ ctx }) => {
-    const family = await db.family.findUnique({
-      where: { id: ctx.session.familyId },
+  /** Request password change email from account settings. */
+  requestPasswordChange: userProcedure.mutation(async ({ ctx }) => {
+    const user = await db.user.findUnique({
+      where: { id: ctx.session.userId },
     });
 
-    if (!family) {
+    if (!user) {
       throw new TRPCError({ code: "NOT_FOUND" });
     }
 
-    const rawToken = await createEmailToken(family.id, "PASSWORD_RESET");
+    const rawToken = await createEmailToken(user.id, "PASSWORD_RESET");
     const resetUrl = `${APP_URL}/reset-password?token=${rawToken}`;
 
-    await enqueuePasswordResetEmail(family.email, family.defaultLocale, family.name, resetUrl);
+    await enqueuePasswordResetEmail(user.email, user.defaultLocale, user.email, resetUrl);
 
     return { success: true };
   }),
 
-  /** Change account email (admin only). Sends notification to old + verification to new. */
-  changeEmail: adminProcedure
+  /** Change account email. Sends notification to old + verification to new. */
+  changeEmail: userProcedure
     .input(z.object({
       newEmail: z.string().email(),
       password: z.string().min(1),
     }))
     .mutation(async ({ ctx, input }) => {
-      const family = await db.family.findUnique({
-        where: { id: ctx.session.familyId },
+      const user = await db.user.findUnique({
+        where: { id: ctx.session.userId },
       });
 
-      if (!family) {
+      if (!user) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
       // Verify password (OAuth-only accounts have no password)
-      if (!family.passwordHash) {
+      if (!user.passwordHash) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "OAUTH_ONLY_ACCOUNT",
         });
       }
-      const valid = await bcrypt.compare(input.password, family.passwordHash);
+      const valid = await bcrypt.compare(input.password, user.passwordHash);
       if (!valid) {
         throw new TRPCError({
           code: "UNAUTHORIZED",
@@ -380,7 +374,7 @@ export const accountRouter = router({
       const newEmail = input.newEmail.toLowerCase();
 
       // Check email not already taken
-      const existing = await db.family.findUnique({
+      const existing = await db.user.findUnique({
         where: { email: newEmail },
       });
       if (existing) {
@@ -390,10 +384,10 @@ export const accountRouter = router({
         });
       }
 
-      const oldEmail = family.email;
+      const oldEmail = user.email;
 
-      await db.family.update({
-        where: { id: ctx.session.familyId },
+      await db.user.update({
+        where: { id: ctx.session.userId },
         data: {
           email: newEmail,
           emailVerified: false,
@@ -401,48 +395,48 @@ export const accountRouter = router({
       });
 
       // Notify old email about the change
-      await enqueueEmailChangeNotification(ctx.session.familyId, oldEmail, newEmail, family.name, family.defaultLocale);
+      await enqueueEmailChangeNotification(ctx.session.userId, oldEmail, newEmail, oldEmail, user.defaultLocale);
 
       // Send verification to new email
-      const rawToken = await createEmailToken(ctx.session.familyId, "EMAIL_CHANGE", { newEmail });
+      const rawToken = await createEmailToken(ctx.session.userId, "EMAIL_CHANGE", { newEmail });
       const verifyUrl = `${APP_URL}/verify-email?token=${rawToken}`;
-      await enqueueEmailChangeVerification(newEmail, family.defaultLocale, family.name, verifyUrl);
+      await enqueueEmailChangeVerification(newEmail, user.defaultLocale, newEmail, verifyUrl);
 
       return { success: true };
     }),
 
-  /** Get active sessions for this family (admin only). */
-  activeSessions: adminProcedure.query(async ({ ctx }) => {
+  /** Get active sessions for this user. */
+  activeSessions: userProcedure.query(async ({ ctx }) => {
     return db.activeSession.findMany({
       where: {
-        familyId: ctx.session.familyId,
+        userId: ctx.session.userId,
         expiresAt: { gt: new Date() },
       },
       orderBy: { lastActivity: "desc" },
     });
   }),
 
-  /** Invalidate a specific session (admin only). */
-  invalidateSession: adminProcedure
+  /** Invalidate a specific session. */
+  invalidateSession: userProcedure
     .input(z.object({ sessionId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await db.activeSession.deleteMany({
         where: {
           id: input.sessionId,
-          familyId: ctx.session.familyId,
+          userId: ctx.session.userId,
         },
       });
       return { success: true };
     }),
 
-  /** Get recent login attempts (admin only). */
-  loginAttempts: adminProcedure
+  /** Get recent login attempts. */
+  loginAttempts: userProcedure
     .input(z.object({
       limit: z.number().min(1).max(100).default(20),
     }).optional())
     .query(async ({ ctx, input }) => {
       return db.loginAttempt.findMany({
-        where: { familyId: ctx.session.familyId },
+        where: { userId: ctx.session.userId },
         orderBy: { createdAt: "desc" },
         take: input?.limit ?? 20,
       });
@@ -476,29 +470,29 @@ export const accountRouter = router({
         });
       }
 
-      const family = await db.family.findUnique({
-        where: { id: pending.familyId },
+      const user = await db.user.findUnique({
+        where: { id: pending.userId },
         include: { twoFactorRecoveryCodes: true },
       });
 
-      if (!family || !family.twoFactorSecret) {
+      if (!user || !user.twoFactorSecret) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       }
 
-      const secret = decryptTotpSecret(family.twoFactorSecret);
+      const secret = decryptTotpSecret(user.twoFactorSecret);
       const code = input.code.replace(/[-\s]/g, "");
 
       // Try TOTP first
       if (code.length === 6 && verifyTotpCode(code, secret)) {
         await resetTotpRateLimit(ipAddress);
-        await setAccountSession(pending.familyId, pending.rememberMe);
+        await setUserSession(pending.userId, pending.rememberMe);
         return { success: true, usedRecoveryCode: false };
       }
 
       // Try recovery code
       const matchedCodeId = await matchRecoveryCode(
         input.code,
-        family.twoFactorRecoveryCodes
+        user.twoFactorRecoveryCodes
       );
 
       if (matchedCodeId) {
@@ -507,9 +501,9 @@ export const accountRouter = router({
           data: { usedAt: new Date() },
         });
         await resetTotpRateLimit(ipAddress);
-        await setAccountSession(pending.familyId, pending.rememberMe);
+        await setUserSession(pending.userId, pending.rememberMe);
 
-        const remaining = family.twoFactorRecoveryCodes.filter(
+        const remaining = user.twoFactorRecoveryCodes.filter(
           (c) => !c.usedAt && c.id !== matchedCodeId
         ).length;
 
@@ -522,22 +516,22 @@ export const accountRouter = router({
       });
     }),
 
-  /** Start 2FA setup: generate secret and QR code (admin only). */
-  setupTwoFactor: adminProcedure.mutation(async ({ ctx }) => {
-    const family = await db.family.findUnique({
-      where: { id: ctx.session.familyId },
+  /** Start 2FA setup: generate secret and QR code. */
+  setupTwoFactor: userProcedure.mutation(async ({ ctx }) => {
+    const user = await db.user.findUnique({
+      where: { id: ctx.session.userId },
     });
 
-    if (!family) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!user) throw new TRPCError({ code: "NOT_FOUND" });
 
-    if (!family.emailVerified) {
+    if (!user.emailVerified) {
       throw new TRPCError({
         code: "PRECONDITION_FAILED",
         message: "Email must be verified before enabling 2FA.",
       });
     }
 
-    if (family.twoFactorEnabled) {
+    if (user.twoFactorEnabled) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "Two-factor authentication is already enabled.",
@@ -545,35 +539,35 @@ export const accountRouter = router({
     }
 
     const secret = generateTotpSecret();
-    const otpauthUri = generateTotpUri(secret, family.email);
+    const otpauthUri = generateTotpUri(secret, user.email);
     const qrCodeDataUrl = await generateQrCodeDataUrl(otpauthUri);
 
     // Store encrypted secret (not enabled yet — enabled on confirm)
-    await db.family.update({
-      where: { id: family.id },
+    await db.user.update({
+      where: { id: user.id },
       data: { twoFactorSecret: encryptTotpSecret(secret) },
     });
 
     return { secret, qrCodeDataUrl };
   }),
 
-  /** Confirm 2FA setup: verify TOTP code and generate recovery codes (admin only). */
-  confirmTwoFactor: adminProcedure
+  /** Confirm 2FA setup: verify TOTP code and generate recovery codes. */
+  confirmTwoFactor: userProcedure
     .input(z.object({ code: z.string().length(6) }))
     .mutation(async ({ ctx, input }) => {
-      const family = await db.family.findUnique({
-        where: { id: ctx.session.familyId },
+      const user = await db.user.findUnique({
+        where: { id: ctx.session.userId },
       });
 
-      if (!family || !family.twoFactorSecret) {
+      if (!user || !user.twoFactorSecret) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "No 2FA setup in progress." });
       }
 
-      if (family.twoFactorEnabled) {
+      if (user.twoFactorEnabled) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "2FA is already enabled." });
       }
 
-      const secret = decryptTotpSecret(family.twoFactorSecret);
+      const secret = decryptTotpSecret(user.twoFactorSecret);
       if (!verifyTotpCode(input.code, secret)) {
         throw new TRPCError({
           code: "UNAUTHORIZED",
@@ -584,39 +578,39 @@ export const accountRouter = router({
       const { plain, hashed } = await generateRecoveryCodes();
 
       await db.$transaction(async (tx) => {
-        await tx.family.update({
-          where: { id: family.id },
+        await tx.user.update({
+          where: { id: user.id },
           data: { twoFactorEnabled: true },
         });
 
         await tx.twoFactorRecoveryCode.createMany({
           data: hashed.map((codeHash) => ({
-            familyId: family.id,
+            userId: user.id,
             codeHash,
           })),
         });
       });
 
       enqueueTwoFactorEnabledEmail(
-        family.id, family.email, family.defaultLocale, family.name
+        user.id, user.email, user.defaultLocale, user.email
       ).catch(() => {});
 
       return { recoveryCodes: plain };
     }),
 
-  /** Disable 2FA (admin only). Requires valid TOTP code. */
-  disableTwoFactor: adminProcedure
+  /** Disable 2FA. Requires valid TOTP code. */
+  disableTwoFactor: userProcedure
     .input(z.object({ code: z.string().length(6) }))
     .mutation(async ({ ctx, input }) => {
-      const family = await db.family.findUnique({
-        where: { id: ctx.session.familyId },
+      const user = await db.user.findUnique({
+        where: { id: ctx.session.userId },
       });
 
-      if (!family || !family.twoFactorEnabled || !family.twoFactorSecret) {
+      if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "2FA is not enabled." });
       }
 
-      const secret = decryptTotpSecret(family.twoFactorSecret);
+      const secret = decryptTotpSecret(user.twoFactorSecret);
       if (!verifyTotpCode(input.code, secret)) {
         throw new TRPCError({
           code: "UNAUTHORIZED",
@@ -625,36 +619,36 @@ export const accountRouter = router({
       }
 
       await db.$transaction(async (tx) => {
-        await tx.family.update({
-          where: { id: family.id },
+        await tx.user.update({
+          where: { id: user.id },
           data: { twoFactorEnabled: false, twoFactorSecret: null },
         });
 
         await tx.twoFactorRecoveryCode.deleteMany({
-          where: { familyId: family.id },
+          where: { userId: user.id },
         });
       });
 
       enqueueTwoFactorDisabledEmail(
-        family.id, family.email, family.defaultLocale, family.name
+        user.id, user.email, user.defaultLocale, user.email
       ).catch(() => {});
 
       return { success: true };
     }),
 
-  /** Regenerate recovery codes (admin only). Requires valid TOTP code. */
-  regenerateRecoveryCodes: adminProcedure
+  /** Regenerate recovery codes. Requires valid TOTP code. */
+  regenerateRecoveryCodes: userProcedure
     .input(z.object({ code: z.string().length(6) }))
     .mutation(async ({ ctx, input }) => {
-      const family = await db.family.findUnique({
-        where: { id: ctx.session.familyId },
+      const user = await db.user.findUnique({
+        where: { id: ctx.session.userId },
       });
 
-      if (!family || !family.twoFactorEnabled || !family.twoFactorSecret) {
+      if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "2FA is not enabled." });
       }
 
-      const secret = decryptTotpSecret(family.twoFactorSecret);
+      const secret = decryptTotpSecret(user.twoFactorSecret);
       if (!verifyTotpCode(input.code, secret)) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid code." });
       }
@@ -663,12 +657,12 @@ export const accountRouter = router({
 
       await db.$transaction(async (tx) => {
         await tx.twoFactorRecoveryCode.deleteMany({
-          where: { familyId: family.id },
+          where: { userId: user.id },
         });
 
         await tx.twoFactorRecoveryCode.createMany({
           data: hashed.map((codeHash) => ({
-            familyId: family.id,
+            userId: user.id,
             codeHash,
           })),
         });
@@ -677,10 +671,10 @@ export const accountRouter = router({
       return { recoveryCodes: plain };
     }),
 
-  /** Get 2FA status (admin only). */
-  getTwoFactorStatus: adminProcedure.query(async ({ ctx }) => {
-    const family = await db.family.findUnique({
-      where: { id: ctx.session.familyId },
+  /** Get 2FA status. */
+  getTwoFactorStatus: userProcedure.query(async ({ ctx }) => {
+    const user = await db.user.findUnique({
+      where: { id: ctx.session.userId },
       include: {
         twoFactorRecoveryCodes: {
           select: { id: true, usedAt: true },
@@ -688,23 +682,23 @@ export const accountRouter = router({
       },
     });
 
-    if (!family) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!user) throw new TRPCError({ code: "NOT_FOUND" });
 
     return {
-      enabled: family.twoFactorEnabled,
-      emailVerified: family.emailVerified,
-      recoveryCodesRemaining: family.twoFactorRecoveryCodes.filter((c) => !c.usedAt).length,
-      recoveryCodesTotal: family.twoFactorRecoveryCodes.length,
+      enabled: user.twoFactorEnabled,
+      emailVerified: user.emailVerified,
+      recoveryCodesRemaining: user.twoFactorRecoveryCodes.filter((c) => !c.usedAt).length,
+      recoveryCodesTotal: user.twoFactorRecoveryCodes.length,
     };
   }),
 
   // ─── OAuth / Linked Accounts ──────────────────────────────────────────────
 
-  /** Get linked OAuth accounts for this family (admin only). */
-  getLinkedAccounts: adminProcedure.query(async ({ ctx }) => {
-    const [accounts, family] = await Promise.all([
+  /** Get linked OAuth accounts for this user. */
+  getLinkedAccounts: userProcedure.query(async ({ ctx }) => {
+    const [accounts, user] = await Promise.all([
       db.oAuthAccount.findMany({
-        where: { familyId: ctx.session.familyId },
+        where: { userId: ctx.session.userId },
         select: {
           id: true,
           provider: true,
@@ -714,34 +708,34 @@ export const accountRouter = router({
         },
         orderBy: { createdAt: "asc" },
       }),
-      db.family.findUnique({
-        where: { id: ctx.session.familyId },
+      db.user.findUnique({
+        where: { id: ctx.session.userId },
         select: { passwordHash: true },
       }),
     ]);
 
     return {
       accounts,
-      hasPassword: family?.passwordHash != null,
+      hasPassword: user?.passwordHash != null,
     };
   }),
 
-  /** Unlink an OAuth account (admin only). Cannot remove last auth method. */
-  unlinkOAuthAccount: adminProcedure
+  /** Unlink an OAuth account. Cannot remove last auth method. */
+  unlinkOAuthAccount: userProcedure
     .input(z.object({ accountId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const family = await db.family.findUnique({
-        where: { id: ctx.session.familyId },
+      const user = await db.user.findUnique({
+        where: { id: ctx.session.userId },
         include: { oauthAccounts: { select: { id: true } } },
       });
 
-      if (!family) {
+      if (!user) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
       // Prevent removing last auth method
-      const hasPassword = family.passwordHash !== null;
-      const oauthCount = family.oauthAccounts.length;
+      const hasPassword = user.passwordHash !== null;
+      const oauthCount = user.oauthAccounts.length;
 
       if (!hasPassword && oauthCount <= 1) {
         throw new TRPCError({
@@ -751,21 +745,21 @@ export const accountRouter = router({
       }
 
       const accountToUnlink = await db.oAuthAccount.findFirst({
-        where: { id: input.accountId, familyId: ctx.session.familyId },
+        where: { id: input.accountId, userId: ctx.session.userId },
         select: { provider: true, email: true },
       });
 
       await db.oAuthAccount.deleteMany({
         where: {
           id: input.accountId,
-          familyId: ctx.session.familyId,
+          userId: ctx.session.userId,
         },
       });
 
       if (accountToUnlink) {
         const providerName = accountToUnlink.provider === "GOOGLE" ? "Google" : "Microsoft";
         enqueueOAuthUnlinkedEmail(
-          family.id, family.email, family.defaultLocale, family.name,
+          user.id, user.email, user.defaultLocale, user.email,
           providerName, accountToUnlink.email
         ).catch(() => {});
       }
@@ -773,21 +767,21 @@ export const accountRouter = router({
       return { success: true };
     }),
 
-  /** Set a password for an OAuth-only account (admin only). */
-  setPassword: adminProcedure
+  /** Set a password for an OAuth-only account. */
+  setPassword: userProcedure
     .input(z.object({
       newPassword: z.string().min(8).max(128),
     }))
     .mutation(async ({ ctx, input }) => {
-      const family = await db.family.findUnique({
-        where: { id: ctx.session.familyId },
+      const user = await db.user.findUnique({
+        where: { id: ctx.session.userId },
       });
 
-      if (!family) {
+      if (!user) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      if (family.passwordHash !== null) {
+      if (user.passwordHash !== null) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Account already has a password. Use password reset instead.",
@@ -796,23 +790,23 @@ export const accountRouter = router({
 
       const passwordHash = await bcrypt.hash(input.newPassword, 10);
 
-      await db.family.update({
-        where: { id: ctx.session.familyId },
+      await db.user.update({
+        where: { id: ctx.session.userId },
         data: { passwordHash },
       });
 
       return { success: true };
     }),
 
-  /** Get email notification preferences (admin only). */
-  getEmailPreferences: adminProcedure.query(async ({ ctx }) => {
+  /** Get email notification preferences. */
+  getEmailPreferences: userProcedure.query(async ({ ctx }) => {
     return db.emailPreference.findMany({
-      where: { familyId: ctx.session.familyId },
+      where: { userId: ctx.session.userId },
     });
   }),
 
-  /** Update a single email notification preference (admin only). */
-  updateEmailPreference: adminProcedure
+  /** Update a single email notification preference. */
+  updateEmailPreference: userProcedure
     .input(z.object({
       type: z.enum([
         "TWO_FACTOR_ENABLED",
@@ -826,13 +820,13 @@ export const accountRouter = router({
     .mutation(async ({ ctx, input }) => {
       return db.emailPreference.upsert({
         where: {
-          familyId_type: {
-            familyId: ctx.session.familyId,
+          userId_type: {
+            userId: ctx.session.userId,
             type: input.type,
           },
         },
         create: {
-          familyId: ctx.session.familyId,
+          userId: ctx.session.userId,
           type: input.type,
           enabled: input.enabled,
         },

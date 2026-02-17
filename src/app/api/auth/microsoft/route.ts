@@ -36,8 +36,8 @@ export async function GET(request: NextRequest) {
       nonce: crypto.randomBytes(16).toString("hex"),
     };
 
-    if (session?.familyId && request.nextUrl.searchParams.get("action") === "link") {
-      stateData.familyId = session.familyId;
+    if (session?.userId && request.nextUrl.searchParams.get("action") === "link") {
+      stateData.userId = session.userId;
     }
 
     const state = await sealData(stateData, {

@@ -23,10 +23,10 @@ export function hashToken(rawToken: string): string {
 /**
  * Create a new email token, store its hash in the DB, and return the raw token.
  *
- * Automatically cleans up previous unused tokens of the same type for this family.
+ * Automatically cleans up previous unused tokens of the same type for this user.
  */
 export async function createEmailToken(
-  familyId: string,
+  userId: string,
   type: EmailTokenType,
   metadata?: Prisma.InputJsonValue,
 ): Promise<string> {
@@ -34,14 +34,14 @@ export async function createEmailToken(
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + TOKEN_TTL[type]);
 
-  // Remove old unused tokens of same type for this family
+  // Remove old unused tokens of same type for this user
   await db.emailToken.deleteMany({
-    where: { familyId, type, usedAt: null },
+    where: { userId, type, usedAt: null },
   });
 
   await db.emailToken.create({
     data: {
-      familyId,
+      userId,
       tokenHash,
       type,
       expiresAt,

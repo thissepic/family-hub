@@ -1,6 +1,6 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
-import { getSession, type SessionData, type FullSessionData, isFullSession } from "@/lib/auth";
+import { getSession, type SessionData, type FamilySessionData, type FullSessionData, isFullSession, isFamilySession } from "@/lib/auth";
 import { checkApiRateLimit } from "@/lib/rate-limit";
 
 export type TRPCContext = {
@@ -19,11 +19,12 @@ const t = initTRPC.context<TRPCContext>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
-/** Rate-limits authenticated API requests per family. */
+/** Rate-limits authenticated API requests per user. */
 const rateLimitMiddleware = t.middleware(async ({ ctx, next }) => {
-  if (ctx.session?.familyId) {
+  const key = ctx.session?.familyId || ctx.session?.userId;
+  if (key) {
     try {
-      await checkApiRateLimit(ctx.session.familyId);
+      await checkApiRateLimit(key);
     } catch {
       throw new TRPCError({
         code: "TOO_MANY_REQUESTS",
@@ -34,17 +35,30 @@ const rateLimitMiddleware = t.middleware(async ({ ctx, next }) => {
   return next();
 });
 
-/** Requires account-level authentication (email/password login completed). */
-export const accountProcedure = t.procedure.use(rateLimitMiddleware).use(async ({ ctx, next }) => {
-  if (!ctx.session?.familyId) {
+/** Requires user-level authentication (login completed). */
+export const userProcedure = t.procedure.use(rateLimitMiddleware).use(async ({ ctx, next }) => {
+  if (!ctx.session?.userId) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
   return next({
-    ctx: { session: ctx.session as SessionData },
+    ctx: { session: ctx.session as SessionData & { userId: string } },
   });
 });
 
-/** Requires full authentication (account + profile selected). */
+/** @deprecated Use userProcedure instead. Kept for backward compatibility during migration. */
+export const accountProcedure = userProcedure;
+
+/** Requires user + family selected. */
+export const familyProcedure = t.procedure.use(rateLimitMiddleware).use(async ({ ctx, next }) => {
+  if (!ctx.session?.userId || !isFamilySession(ctx.session)) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+  return next({
+    ctx: { session: ctx.session as FamilySessionData },
+  });
+});
+
+/** Requires full authentication (user + family + member selected). */
 export const protectedProcedure = t.procedure.use(rateLimitMiddleware).use(async ({ ctx, next }) => {
   if (!ctx.session || !isFullSession(ctx.session)) {
     throw new TRPCError({ code: "UNAUTHORIZED" });

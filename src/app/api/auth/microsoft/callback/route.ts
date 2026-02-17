@@ -84,18 +84,18 @@ export async function GET(request: NextRequest) {
     };
 
     // Process the OAuth callback
-    const processResult = await processOAuthCallback(userInfo, stateData.familyId);
+    const processResult = await processOAuthCallback(userInfo, stateData.userId);
 
     if (processResult.action === "login" || processResult.action === "link_and_login") {
-      // If linking from settings, redirect back to settings
-      if (stateData.familyId) {
+      // If linking from account settings, redirect back to account settings
+      if (stateData.userId) {
         return NextResponse.redirect(
-          new URL("/settings?tab=security&linked=microsoft", appUrl)
+          new URL("/account?linked=microsoft", appUrl)
         );
       }
 
-      await handleOAuthLogin(processResult.familyId, userInfo.email);
-      return NextResponse.redirect(new URL("/profiles", appUrl));
+      await handleOAuthLogin(processResult.userId, userInfo.email);
+      return NextResponse.redirect(new URL("/families", appUrl));
     }
 
     // New user → store pending data and redirect to registration

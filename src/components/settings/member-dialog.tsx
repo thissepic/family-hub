@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -32,7 +33,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ColorPicker } from "@/components/setup/color-picker";
-import { Loader2, Trash2, KeyRound } from "lucide-react";
+import {
+  Loader2,
+  Trash2,
+  KeyRound,
+  UserCheck,
+  UserX,
+  Mail,
+  Copy,
+  Check,
+} from "lucide-react";
 
 interface MemberDialogProps {
   open: boolean;
@@ -62,6 +72,7 @@ export function MemberDialog({
   const [role, setRole] = useState<"ADMIN" | "MEMBER">("MEMBER");
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
+  const [email, setEmail] = useState("");
 
   // Dialog states
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -69,12 +80,32 @@ export function MemberDialog({
   const [resetPinValue, setResetPinValue] = useState("");
   const [resetPinConfirm, setResetPinConfirm] = useState("");
 
+  // Invite state
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteSent, setInviteSent] = useState(false);
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+
   // Fetch member data for editing
   const { data: members } = useQuery(
     trpc.members.list.queryOptions(undefined, { enabled: open })
   );
 
+  // Fetch invitations to check for pending profile invites
+  const { data: invitations } = useQuery(
+    trpc.invitations.list.queryOptions(undefined, { enabled: open && isEditing })
+  );
+
   const member = members?.find((m) => m.id === memberId);
+  const isLinked = member?.userId !== null && member?.userId !== undefined;
+
+  // Check if there's already a pending invitation for this profile
+  const pendingInvite = invitations?.find(
+    (inv: { forMember?: { id: string } | null; status: string; expiresAt: string | Date; email?: string | null }) =>
+      inv.forMember?.id === memberId &&
+      inv.status === "PENDING" &&
+      new Date(inv.expiresAt) > new Date()
+  );
 
   // Initialize form when member data loads
   useEffect(() => {
@@ -90,13 +121,20 @@ export function MemberDialog({
       setRole("MEMBER");
       setPin("");
       setConfirmPin("");
+      setEmail("");
     }
+    // Reset invite state when opening/closing
+    setInviteEmail("");
+    setInviteSent(false);
+    setInviteToken(null);
+    setLinkCopied(false);
   }, [member, isEditing, open]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: [["family"]] });
     queryClient.invalidateQueries({ queryKey: [["members"]] });
     queryClient.invalidateQueries({ queryKey: [["auth", "listMembers"]] });
+    queryClient.invalidateQueries({ queryKey: [["invitations"]] });
   };
 
   const createMutation = useMutation(
@@ -165,6 +203,20 @@ export function MemberDialog({
     })
   );
 
+  const sendInviteMutation = useMutation(
+    trpc.invitations.create.mutationOptions({
+      onSuccess: (data) => {
+        setInviteSent(true);
+        setInviteToken(data.token);
+        toast.success(t("profileInviteSent", { email: inviteEmail }));
+        queryClient.invalidateQueries({ queryKey: [["invitations"]] });
+      },
+      onError: (err) => {
+        toast.error(err.message);
+      },
+    })
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -185,8 +237,9 @@ export function MemberDialog({
         name: name.trim(),
         avatar: avatar.trim() || undefined,
         color,
-        pin,
+        pin: pin || undefined,
         role,
+        email: email.trim() || undefined,
       });
     }
   };
@@ -212,6 +265,26 @@ export function MemberDialog({
     resetPinMutation.mutate({ memberId, newPin: resetPinValue });
   };
 
+  const handleSendInvite = () => {
+    if (!memberId || !inviteEmail.trim()) return;
+    sendInviteMutation.mutate({
+      email: inviteEmail.trim(),
+      forMemberId: memberId,
+    });
+  };
+
+  const handleCopyInviteLink = async () => {
+    if (!inviteToken) return;
+    const url = `${window.location.origin}/invite/${inviteToken}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy link");
+    }
+  };
+
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   return (
@@ -223,6 +296,23 @@ export function MemberDialog({
               {isEditing ? t("editMember") : t("addMember")}
             </DialogTitle>
           </DialogHeader>
+
+          {/* Linked/Unlinked Status Badge (edit mode only) */}
+          {isEditing && member && !isSelf && (
+            <div className="flex items-center gap-2">
+              {isLinked ? (
+                <Badge variant="default" className="gap-1">
+                  <UserCheck className="h-3 w-3" />
+                  {t("accountLinked")}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1 border-amber-500 text-amber-600 dark:text-amber-400">
+                  <UserX className="h-3 w-3" />
+                  {t("noAccountLinked")}
+                </Badge>
+              )}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
@@ -281,6 +371,7 @@ export function MemberDialog({
               </div>
             )}
 
+            {/* PIN fields only when creating */}
             {!isEditing && (
               <>
                 <div className="space-y-1.5">
@@ -293,22 +384,35 @@ export function MemberDialog({
                     placeholder="****"
                     minLength={4}
                     maxLength={8}
-                    required
                   />
                 </div>
 
+                {pin && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="member-confirm-pin">{t("confirmPin")}</Label>
+                    <Input
+                      id="member-confirm-pin"
+                      type="password"
+                      value={confirmPin}
+                      onChange={(e) => setConfirmPin(e.target.value)}
+                      placeholder="****"
+                      minLength={4}
+                      maxLength={8}
+                    />
+                  </div>
+                )}
+
+                {/* Email field for pre-linking when creating */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="member-confirm-pin">{t("confirmPin")}</Label>
+                  <Label htmlFor="member-email">{t("inviteEmailLabel")}</Label>
                   <Input
-                    id="member-confirm-pin"
-                    type="password"
-                    value={confirmPin}
-                    onChange={(e) => setConfirmPin(e.target.value)}
-                    placeholder="****"
-                    minLength={4}
-                    maxLength={8}
-                    required
+                    id="member-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="email@example.com"
                   />
+                  <p className="text-xs text-muted-foreground">{t("emailHint")}</p>
                 </div>
               </>
             )}
@@ -318,7 +422,7 @@ export function MemberDialog({
               disabled={
                 isSubmitting ||
                 !name.trim() ||
-                (!isEditing && (pin.length < 4 || !confirmPin))
+                (!isEditing && pin.length > 0 && (pin.length < 4 || !confirmPin))
               }
               className="w-full"
             >
@@ -329,8 +433,89 @@ export function MemberDialog({
             </Button>
           </form>
 
+          {/* Actions section (edit mode, not self) */}
           {isEditing && member && !isSelf && (
             <div className="space-y-2 border-t pt-3">
+              {/* Invite action for unlinked profiles */}
+              {!isLinked && !pendingInvite && (
+                <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                  <p className="text-sm font-medium">{t("sendInviteToMember")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("profileInviteDescription")}
+                  </p>
+                  {!inviteSent ? (
+                    <div className="flex gap-2">
+                      <Input
+                        type="email"
+                        placeholder="email@example.com"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        className="text-sm"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleSendInvite}
+                        disabled={
+                          sendInviteMutation.isPending || !inviteEmail.trim()
+                        }
+                      >
+                        {sendInviteMutation.isPending ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            {t("profileInviteSending")}
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="mr-1 h-3 w-3" />
+                            {t("sendProfileInvite")}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm text-green-600 dark:text-green-400">
+                        ✓ {t("profileInviteSent", { email: inviteEmail })}
+                      </p>
+                      {inviteToken && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCopyInviteLink}
+                          className="w-full"
+                        >
+                          {linkCopied ? (
+                            <>
+                              <Check className="mr-1 h-3 w-3" />
+                              Link copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="mr-1 h-3 w-3" />
+                              Copy invite link
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Show pending invitation if one exists */}
+              {!isLinked && pendingInvite && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3">
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    <Mail className="inline h-3 w-3 mr-1" />
+                    {t("pendingProfileInvite", {
+                      email: (pendingInvite as { email?: string | null }).email ?? "link",
+                    })}
+                  </p>
+                </div>
+              )}
+
               <Button
                 type="button"
                 variant="outline"

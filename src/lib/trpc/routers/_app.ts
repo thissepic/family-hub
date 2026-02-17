@@ -3,6 +3,7 @@ import { accountRouter } from "./account";
 import { authRouter } from "./auth";
 import { familyRouter } from "./family";
 import { membersRouter } from "./members";
+import { invitationsRouter } from "./invitations";
 import { calendarRouter } from "./calendar";
 import { calendarSyncRouter } from "./calendar-sync";
 import { tasksRouter } from "./tasks";
@@ -21,6 +22,7 @@ export const appRouter = router({
   auth: authRouter,
   family: familyRouter,
   members: membersRouter,
+  invitations: invitationsRouter,
   calendar: calendarRouter,
   calendarSync: calendarSyncRouter,
   tasks: tasksRouter,

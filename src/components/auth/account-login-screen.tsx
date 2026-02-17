@@ -44,7 +44,7 @@ export function AccountLoginScreen() {
           router.push(`/verify-2fa?token=${data.twoFactorToken}`);
           return;
         }
-        router.push("/profiles");
+        router.push("/families");
         router.refresh();
       },
       onError: (err) => {

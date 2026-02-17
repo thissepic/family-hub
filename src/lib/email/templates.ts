@@ -26,6 +26,13 @@ interface OAuthAccountEmailData {
   providerEmail: string;
 }
 
+interface InvitationEmailData {
+  familyName: string;
+  inviterName: string;
+  inviteUrl: string;
+  expiresAt: string;
+}
+
 // ─── Translations ──────────────────────────────────────────────────────────
 
 const t: Record<string, Record<Locale, string>> = {
@@ -175,6 +182,28 @@ const t: Record<string, Record<Locale, string>> = {
   oauthUnlinkedBody: {
     en: "A sign-in method has been removed from your Family Hub account.",
     de: "Eine Anmeldemethode wurde von deinem Family Hub Konto entfernt.",
+  },
+
+  // Invitation
+  inviteSubject: {
+    en: "You're invited to join a family on Family Hub",
+    de: "Du wurdest zu einer Familie auf Family Hub eingeladen",
+  },
+  inviteHeading: {
+    en: "Family Invitation",
+    de: "Familieneinladung",
+  },
+  inviteBody: {
+    en: "has invited you to join their family on Family Hub.",
+    de: "hat dich eingeladen, ihrer Familie auf Family Hub beizutreten.",
+  },
+  inviteButton: {
+    en: "Accept Invitation",
+    de: "Einladung annehmen",
+  },
+  inviteExpiry: {
+    en: "This invitation expires on",
+    de: "Diese Einladung laeuft ab am",
   },
 
   // Shared security warning
@@ -370,4 +399,25 @@ export function oauthUnlinkedEmail(
   );
 
   return { subject: t.oauthUnlinkedSubject[locale], html };
+}
+
+export function invitationEmail(
+  locale: Locale,
+  data: InvitationEmailData,
+): { subject: string; html: string } {
+  const html = layout(
+    `<h2 style="margin:0 0 16px;font-size:18px;color:#18181b;">${t.inviteHeading[locale]}</h2>
+     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">
+       <strong>${data.inviterName}</strong> ${t.inviteBody[locale]}
+     </p>
+     <table style="margin:16px 0;font-size:14px;color:#3f3f46;">
+       <tr><td style="padding:8px 16px;background:#f4f4f5;border-radius:8px;font-weight:600;font-size:16px;">🏠 ${data.familyName}</td></tr>
+     </table>
+     ${button(t.inviteButton[locale], data.inviteUrl)}
+     <p style="font-size:13px;color:#71717a;">${t.inviteExpiry[locale]} ${data.expiresAt}.</p>
+     ${linkFallback(data.inviteUrl, locale)}`,
+    locale,
+  );
+
+  return { subject: t.inviteSubject[locale], html };
 }

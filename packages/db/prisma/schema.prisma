@@ -188,22 +188,46 @@ enum ThemeMode {
   AUTO
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
 // ─── Models ─────────────────────────────────────────────────────────────────
 
-model Family {
-  id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
-  passwordHash  String?
-  emailVerified    Boolean  @default(false)
-  twoFactorEnabled Boolean  @default(false)
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String?
+  emailVerified    Boolean   @default(false)
+  twoFactorEnabled Boolean   @default(false)
   twoFactorSecret  String?
-  defaultLocale    String   @default("en")
+  defaultLocale    String    @default("en")
+  theme            ThemeMode @default(AUTO)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  familyMembers          FamilyMember[]
+  oauthAccounts          OAuthAccount[]
+  emailTokens            EmailToken[]
+  twoFactorRecoveryCodes TwoFactorRecoveryCode[]
+  loginAttempts          LoginAttempt[]
+  activeSessions         ActiveSession[]
+  emailPreferences       EmailPreference[]
+}
+
+model Family {
+  id            String    @id @default(cuid())
+  name          String
+  defaultLocale String    @default("en")
   theme         ThemeMode @default(AUTO)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   members            FamilyMember[]
+  invitations        FamilyInvitation[]
   calendarEvents     CalendarEvent[]
   tasks              Task[]
   chores             Chore[]
@@ -218,21 +242,17 @@ model Family {
   familyGoals        FamilyGoal[]
   xpSettings         XpSettings?
   activityEvents     ActivityEvent[]
-  loginAttempts      LoginAttempt[]
   activeSessions     ActiveSession[]
-  emailTokens             EmailToken[]
-  twoFactorRecoveryCodes  TwoFactorRecoveryCode[]
-  oauthAccounts           OAuthAccount[]
-  emailPreferences        EmailPreference[]
 }
 
 model FamilyMember {
   id              String     @id @default(cuid())
   familyId        String
+  userId          String?
   name            String
   avatar          String?
   color           String     @default("#3b82f6")
-  pinHash         String
+  pinHash         String?
   role            MemberRole @default(MEMBER)
   locale          String?
   themePreference ThemeMode  @default(AUTO)
@@ -240,7 +260,10 @@ model FamilyMember {
   updatedAt       DateTime   @updatedAt
 
   family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  sentInvitations            FamilyInvitation[]
+  invitationsFor             FamilyInvitation[]         @relation("InvitationForMember")
   createdCalendarEvents      CalendarEvent[]          @relation("CreatedByMember")
   eventAssignments           EventAssignee[]
   externalCalendarConnections ExternalCalendarConnection[]
@@ -268,7 +291,9 @@ model FamilyMember {
   pushSubscriptions          PushSubscription[]
   notificationPreferences    NotificationPreference[]
 
+  @@unique([familyId, userId])
   @@index([familyId])
+  @@index([userId])
 }
 
 model CalendarEvent {
@@ -824,7 +849,7 @@ model NotificationPreference {
 
 model LoginAttempt {
   id            String   @id @default(cuid())
-  familyId      String?
+  userId        String?
   email         String?
   ipAddress     String
   userAgent     String?
@@ -832,7 +857,7 @@ model LoginAttempt {
   failureReason String?
   createdAt     DateTime @default(now())
 
-  family Family? @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([email])
   @@index([ipAddress])
@@ -841,7 +866,8 @@ model LoginAttempt {
 
 model ActiveSession {
   id           String   @id @default(cuid())
-  familyId     String
+  userId       String
+  familyId     String?
   memberId     String?
   sessionToken String   @unique
   ipAddress    String
@@ -850,15 +876,17 @@ model ActiveSession {
   expiresAt    DateTime
   createdAt    DateTime @default(now())
 
-  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family Family? @relation(fields: [familyId], references: [id], onDelete: SetNull)
 
+  @@index([userId])
   @@index([familyId])
   @@index([expiresAt])
 }
 
 model EmailToken {
   id        String         @id @default(cuid())
-  familyId  String
+  userId    String
   tokenHash String         @unique
   type      EmailTokenType
   expiresAt DateTime
@@ -866,27 +894,27 @@ model EmailToken {
   metadata  Json?
   createdAt DateTime       @default(now())
 
-  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([familyId])
+  @@index([userId])
   @@index([expiresAt])
 }
 
 model TwoFactorRecoveryCode {
   id        String    @id @default(cuid())
-  familyId  String
+  userId    String
   codeHash  String
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
-  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([familyId])
+  @@index([userId])
 }
 
 model OAuthAccount {
   id                String        @id @default(cuid())
-  familyId          String
+  userId            String
   provider          OAuthProvider
   providerAccountId String
   email             String
@@ -894,21 +922,46 @@ model OAuthAccount {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
-  @@index([familyId])
+  @@index([userId])
   @@index([provider, email])
 }
 
 model EmailPreference {
-  id       String                @id @default(cuid())
-  familyId String
-  type     EmailNotificationType
-  enabled  Boolean               @default(true)
+  id      String                @id @default(cuid())
+  userId  String
+  type    EmailNotificationType
+  enabled Boolean               @default(true)
 
-  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([familyId, type])
+  @@unique([userId, type])
+  @@index([userId])
+}
+
+// ─── Invitation ─────────────────────────────────────────────────────────────
+
+model FamilyInvitation {
+  id          String           @id @default(cuid())
+  familyId    String
+  email       String?
+  role        MemberRole       @default(MEMBER)
+  token       String           @unique
+  status      InvitationStatus @default(PENDING)
+  invitedById String
+  forMemberId String?
+  expiresAt   DateTime
+  createdAt   DateTime         @default(now())
+  acceptedAt  DateTime?
+
+  family    Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  invitedBy FamilyMember  @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+  forMember FamilyMember? @relation("InvitationForMember", fields: [forMemberId], references: [id], onDelete: SetNull)
+
   @@index([familyId])
+  @@index([token])
+  @@index([email])
+  @@index([forMemberId])
 }

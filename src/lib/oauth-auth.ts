@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
-import { setAccountSession, getRequestMeta } from "@/lib/auth";
+import { setUserSession, getRequestMeta } from "@/lib/auth";
 import { sealData } from "iron-session";
 import { cookies } from "next/headers";
-import type { Family, OAuthProvider } from "@prisma/client";
+import type { OAuthProvider } from "@prisma/client";
 import { enqueueOAuthLinkedEmail } from "@/lib/email/queue";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -17,12 +17,12 @@ export interface OAuthUserInfo {
 
 export interface OAuthStateData {
   nonce: string;
-  familyId?: string; // present when linking from settings
+  userId?: string; // present when linking from account settings
 }
 
 type ProcessResult =
-  | { action: "login"; familyId: string }
-  | { action: "link_and_login"; familyId: string }
+  | { action: "login"; userId: string }
+  | { action: "link_and_login"; userId: string }
   | { action: "register" };
 
 // ─── Core Processing ──────────────────────────────────────────────────────────
@@ -33,13 +33,13 @@ type ProcessResult =
  */
 export async function processOAuthCallback(
   userInfo: OAuthUserInfo,
-  linkToFamilyId?: string
+  linkToUserId?: string
 ): Promise<ProcessResult> {
-  // If linking from settings (user already logged in)
-  if (linkToFamilyId) {
+  // If linking from account settings (user already logged in)
+  if (linkToUserId) {
     await db.oAuthAccount.create({
       data: {
-        familyId: linkToFamilyId,
+        userId: linkToUserId,
         provider: userInfo.provider,
         providerAccountId: userInfo.providerAccountId,
         email: userInfo.email,
@@ -47,19 +47,19 @@ export async function processOAuthCallback(
       },
     });
 
-    const linkingFamily = await db.family.findUnique({
-      where: { id: linkToFamilyId },
-      select: { email: true, name: true, defaultLocale: true },
+    const linkingUser = await db.user.findUnique({
+      where: { id: linkToUserId },
+      select: { email: true, defaultLocale: true },
     });
-    if (linkingFamily) {
+    if (linkingUser) {
       const providerName = userInfo.provider === "GOOGLE" ? "Google" : "Microsoft";
       enqueueOAuthLinkedEmail(
-        linkToFamilyId, linkingFamily.email, linkingFamily.defaultLocale, linkingFamily.name,
+        linkToUserId, linkingUser.email, linkingUser.defaultLocale, linkToUserId,
         providerName, userInfo.email
       ).catch(() => {});
     }
 
-    return { action: "login", familyId: linkToFamilyId };
+    return { action: "login", userId: linkToUserId };
   }
 
   // 1. Check if this OAuth identity is already linked
@@ -73,20 +73,20 @@ export async function processOAuthCallback(
   });
 
   if (existingOAuth) {
-    return { action: "login", familyId: existingOAuth.familyId };
+    return { action: "login", userId: existingOAuth.userId };
   }
 
-  // 2. Check if a Family with this email exists (account linking)
+  // 2. Check if a User with this email exists (account linking)
   if (userInfo.email && userInfo.emailVerified) {
-    const existingFamily = await db.family.findUnique({
+    const existingUser = await db.user.findUnique({
       where: { email: userInfo.email.toLowerCase() },
     });
 
-    if (existingFamily) {
+    if (existingUser) {
       // Auto-link: same verified email
       await db.oAuthAccount.create({
         data: {
-          familyId: existingFamily.id,
+          userId: existingUser.id,
           provider: userInfo.provider,
           providerAccountId: userInfo.providerAccountId,
           email: userInfo.email,
@@ -95,20 +95,20 @@ export async function processOAuthCallback(
       });
 
       // Auto-verify email if not already
-      if (!existingFamily.emailVerified) {
-        await db.family.update({
-          where: { id: existingFamily.id },
+      if (!existingUser.emailVerified) {
+        await db.user.update({
+          where: { id: existingUser.id },
           data: { emailVerified: true },
         });
       }
 
       const providerName = userInfo.provider === "GOOGLE" ? "Google" : "Microsoft";
       enqueueOAuthLinkedEmail(
-        existingFamily.id, existingFamily.email, existingFamily.defaultLocale, existingFamily.name,
+        existingUser.id, existingUser.email, existingUser.defaultLocale, existingUser.id,
         providerName, userInfo.email
       ).catch(() => {});
 
-      return { action: "link_and_login", familyId: existingFamily.id };
+      return { action: "link_and_login", userId: existingUser.id };
     }
   }
 
@@ -119,15 +119,15 @@ export async function processOAuthCallback(
 // ─── Session Helpers ──────────────────────────────────────────────────────────
 
 /**
- * Create an account session after OAuth login and record the login attempt.
+ * Create a user session after OAuth login and record the login attempt.
  */
-export async function handleOAuthLogin(familyId: string, email: string): Promise<void> {
-  await setAccountSession(familyId, false);
+export async function handleOAuthLogin(userId: string, email: string): Promise<void> {
+  await setUserSession(userId, false);
 
   const { ipAddress, userAgent } = await getRequestMeta();
   await db.loginAttempt.create({
     data: {
-      familyId,
+      userId,
       email,
       ipAddress,
       userAgent,
