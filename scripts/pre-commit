@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pre-commit hook: prevent accidental commits of secret files
+# Install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+# Check for .env files (allow .env.example and .env.sample)
+STAGED_ENV=$(git diff --cached --name-only | grep -E '(^|/)\.env' | grep -vE '\.(example|sample)$')
+
+if [ -n "$STAGED_ENV" ]; then
+  echo ""
+  echo "ERROR: Blocked commit of .env file(s) with potential secrets:"
+  echo "$STAGED_ENV"
+  echo ""
+  echo "If this is intentional, use: git commit --no-verify"
+  exit 1
+fi
+
+# Check for common secret patterns in staged files
+SECRETS=$(git diff --cached -U0 --diff-filter=ACM | grep -iE '^\+.*(api_key|api_secret|client_secret|private_key|password|secret_key)\s*[:=]\s*"[^"]{8,}"' | grep -v '^\+.*process\.env' | grep -v '^\+.*example' | grep -v '^\+\+\+')
+
+if [ -n "$SECRETS" ]; then
+  echo ""
+  echo "WARNING: Possible hardcoded secrets detected in staged changes:"
+  echo "$SECRETS"
+  echo ""
+  echo "Please review before committing. Use: git commit --no-verify to override."
+  exit 1
+fi

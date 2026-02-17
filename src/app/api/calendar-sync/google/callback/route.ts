@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
       new URL(`${baseRedirect}&connected=google`, appUrl)
     );
   } catch (err) {
-    console.error("Google OAuth callback error:", err);
+    console.error("[CalSync] Google OAuth callback failed:", err instanceof Error ? err.message : "Unknown error");
     return NextResponse.redirect(
       new URL(`${baseRedirect}&error=google_auth_failed`, appUrl)
     );

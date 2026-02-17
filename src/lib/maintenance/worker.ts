@@ -168,30 +168,83 @@ async function handleDailyBackup() {
     return;
   }
 
-  try {
-    const { execSync } = await import("child_process");
-    const { mkdirSync, existsSync } = await import("fs");
+  if (isNaN(retentionDays) || retentionDays < 1 || retentionDays > 365) {
+    console.warn("[Maintenance] Invalid BACKUP_RETENTION_DAYS, using default 7");
+  }
+  const safeRetentionDays = isNaN(retentionDays) || retentionDays < 1 || retentionDays > 365 ? 7 : retentionDays;
 
-    if (!existsSync(backupDir)) {
-      mkdirSync(backupDir, { recursive: true });
+  try {
+    const { spawn } = await import("child_process");
+    const { mkdirSync, existsSync, readdirSync, statSync, unlinkSync } = await import("fs");
+    const { createWriteStream } = await import("fs");
+    const { resolve } = await import("path");
+
+    const resolvedBackupDir = resolve(backupDir);
+
+    if (!existsSync(resolvedBackupDir)) {
+      mkdirSync(resolvedBackupDir, { recursive: true });
     }
 
     const timestamp = new Date().toISOString().split("T")[0];
-    const dumpFile = `${backupDir}/familyhub_${timestamp}.sql.gz`;
+    const dumpFile = resolve(resolvedBackupDir, `familyhub_${timestamp}.sql.gz`);
 
-    execSync(`pg_dump "${dbUrl}" | gzip > "${dumpFile}"`, {
-      timeout: 120000,
+    // Use spawn with argument arrays to prevent shell injection
+    await new Promise<void>((resolvePromise, reject) => {
+      const pgDump = spawn("pg_dump", [dbUrl], { stdio: ["ignore", "pipe", "pipe"] });
+      const gzip = spawn("gzip", [], { stdio: ["pipe", "pipe", "pipe"] });
+
+      pgDump.stdout.pipe(gzip.stdin);
+
+      const output = createWriteStream(dumpFile);
+      gzip.stdout.pipe(output);
+
+      let pgError = "";
+      let gzipError = "";
+      pgDump.stderr.on("data", (data: Buffer) => { pgError += data.toString(); });
+      gzip.stderr.on("data", (data: Buffer) => { gzipError += data.toString(); });
+
+      const timeout = setTimeout(() => {
+        pgDump.kill();
+        gzip.kill();
+        reject(new Error("Backup timed out after 120 seconds"));
+      }, 120000);
+
+      let exitCount = 0;
+      const checkDone = (code: number | null, process: string) => {
+        if (code !== 0 && code !== null) {
+          clearTimeout(timeout);
+          reject(new Error(`${process} exited with code ${code}: ${process === "pg_dump" ? pgError : gzipError}`));
+          return;
+        }
+        exitCount++;
+        if (exitCount === 2) {
+          clearTimeout(timeout);
+          output.end(() => resolvePromise());
+        }
+      };
+
+      pgDump.on("close", (code) => checkDone(code, "pg_dump"));
+      gzip.on("close", (code) => checkDone(code, "gzip"));
+      pgDump.on("error", (err) => { clearTimeout(timeout); reject(err); });
+      gzip.on("error", (err) => { clearTimeout(timeout); reject(err); });
     });
 
-    // Prune old backups
-    execSync(
-      `find "${backupDir}" -name "familyhub_*.sql.gz" -mtime +${retentionDays} -delete`,
-      { timeout: 10000 }
-    );
+    // Prune old backups using pure Node.js (no shell commands)
+    const cutoff = Date.now() - safeRetentionDays * 24 * 60 * 60 * 1000;
+    const files = readdirSync(resolvedBackupDir);
+    for (const file of files) {
+      if (!file.startsWith("familyhub_") || !file.endsWith(".sql.gz")) continue;
+      const filePath = resolve(resolvedBackupDir, file);
+      const fileStat = statSync(filePath);
+      if (fileStat.mtimeMs < cutoff) {
+        unlinkSync(filePath);
+        console.log(`[Maintenance] Pruned old backup: ${file}`);
+      }
+    }
 
     console.log(`[Maintenance] Backup created: ${dumpFile}`);
   } catch (err) {
-    console.error("[Maintenance] Backup failed:", err);
+    console.error("[Maintenance] Backup failed:", err instanceof Error ? err.message : "Unknown error");
     throw err;
   }
 }

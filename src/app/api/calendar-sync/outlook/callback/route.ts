@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
       new URL(`${baseRedirect}&connected=outlook`, appUrl)
     );
   } catch (err) {
-    console.error("Outlook OAuth callback error:", err);
+    console.error("[CalSync] Outlook OAuth callback failed:", err instanceof Error ? err.message : "Unknown error");
     return NextResponse.redirect(
       new URL(`${baseRedirect}&error=outlook_auth_failed`, appUrl)
     );

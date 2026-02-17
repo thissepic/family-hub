@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     await storeOAuthPending(userInfo);
     return NextResponse.redirect(new URL("/register?oauth=google", appUrl));
   } catch (err) {
-    console.error("Google OAuth callback error:", err);
+    console.error("[OAuth] Google auth callback failed:", err instanceof Error ? err.message : "Unknown error");
     return NextResponse.redirect(new URL("/login?error=oauth_failed", appUrl));
   }
 }

@@ -67,7 +67,7 @@ export const notesRouter = router({
         data: {
           familyId: ctx.session.familyId,
           title: input.title,
-          body: input.body ?? undefined,
+          body: (input.body as Prisma.InputJsonValue) ?? undefined,
           color: input.color,
           category: input.category,
           pinned: input.pinned ?? false,
@@ -111,7 +111,7 @@ export const notesRouter = router({
         where: { id },
         data: {
           ...(data.title !== undefined && { title: data.title }),
-          ...(data.body !== undefined && { body: data.body }),
+          ...(data.body !== undefined && { body: data.body as Prisma.InputJsonValue }),
           ...(data.color !== undefined && { color: data.color }),
           ...(data.category !== undefined && { category: data.category }),
           ...(data.pinned !== undefined && { pinned: data.pinned }),

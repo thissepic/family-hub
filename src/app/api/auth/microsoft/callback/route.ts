@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     await storeOAuthPending(userInfo);
     return NextResponse.redirect(new URL("/register?oauth=microsoft", appUrl));
   } catch (err) {
-    console.error("Microsoft OAuth callback error:", err);
+    console.error("[OAuth] Microsoft auth callback failed:", err instanceof Error ? err.message : "Unknown error");
     return NextResponse.redirect(new URL("/login?error=oauth_failed", appUrl));
   }
 }

@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { setLocale } from "@/lib/actions/locale";
 
 const LANGUAGES = [
   { code: "en", label: "English" },
@@ -18,8 +19,8 @@ const LANGUAGES = [
 export function LanguageSwitcher() {
   const t = useTranslations("language");
 
-  const handleChangeLocale = (locale: string) => {
-    document.cookie = `locale=${locale}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+  const handleChangeLocale = async (locale: string) => {
+    await setLocale(locale);
     const url = new URL(window.location.href);
     url.searchParams.set("_l", Date.now().toString());
     window.location.replace(url.toString());

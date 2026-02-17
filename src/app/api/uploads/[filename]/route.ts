@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile, stat } from "fs/promises";
-import { join } from "path";
-import { getSession } from "@/lib/auth";
+import { join, resolve, sep } from "path";
+import { getFullSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 const UPLOAD_DIR = join(process.cwd(), "uploads");
@@ -19,16 +19,20 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ filename: string }> }
 ) {
-  const session = await getSession();
+  // AUTH: This route uses manual auth because of the params argument pattern
+  const session = await getFullSession();
 
-  if (!session?.memberId) {
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { filename } = await params;
 
-  // Prevent path traversal
-  if (filename.includes("..") || filename.includes("/")) {
+  // Prevent path traversal: resolve the path and verify it stays within UPLOAD_DIR
+  const resolvedBase = resolve(UPLOAD_DIR) + sep;
+  const filePath = resolve(UPLOAD_DIR, filename);
+
+  if (!filePath.startsWith(resolvedBase)) {
     return NextResponse.json({ error: "Invalid filename" }, { status: 400 });
   }
 
@@ -43,8 +47,6 @@ export async function GET(
   if (!attachment) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
-
-  const filePath = join(UPLOAD_DIR, filename);
 
   try {
     await stat(filePath);

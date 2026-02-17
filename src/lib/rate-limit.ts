@@ -8,12 +8,20 @@ let redisClient: IORedis | null = null;
 function getRedis(): IORedis | null {
   if (redisClient) return redisClient;
   const url = process.env.REDIS_URL;
-  if (!url) return null;
+  if (!url) {
+    if (process.env.NODE_ENV === "production") {
+      console.error("[Security] REDIS_URL not configured in production – rate limiting uses in-memory fallback (ineffective across multiple processes)");
+    }
+    return null;
+  }
 
   try {
     redisClient = new IORedis(url, { maxRetriesPerRequest: null });
     return redisClient;
   } catch {
+    if (process.env.NODE_ENV === "production") {
+      console.error("[Security] Redis connection failed in production – rate limiting uses in-memory fallback");
+    }
     return null;
   }
 }
@@ -38,6 +46,8 @@ const TOTP_MAX_ATTEMPTS = 5;
 const TOTP_WINDOW_SEC = 900; // 15 min
 const OAUTH_MAX_ATTEMPTS = 10;
 const OAUTH_WINDOW_SEC = 900; // 15 min
+const UPLOAD_MAX_ATTEMPTS = 20;
+const UPLOAD_WINDOW_SEC = 3600; // 1 hour
 
 let loginLimiter: RateLimiterAbstract | null = null;
 let accountLockoutLimiter: RateLimiterAbstract | null = null;
@@ -48,6 +58,7 @@ let passwordResetLimiter: RateLimiterAbstract | null = null;
 let verificationResendLimiter: RateLimiterAbstract | null = null;
 let totpLimiter: RateLimiterAbstract | null = null;
 let oauthLimiter: RateLimiterAbstract | null = null;
+let uploadLimiter: RateLimiterAbstract | null = null;
 
 function getLoginLimiter(): RateLimiterAbstract {
   if (loginLimiter) return loginLimiter;
@@ -238,6 +249,27 @@ function getOAuthLimiter(): RateLimiterAbstract {
   return oauthLimiter;
 }
 
+function getUploadLimiter(): RateLimiterAbstract {
+  if (uploadLimiter) return uploadLimiter;
+  const redis = getRedis();
+
+  if (redis) {
+    uploadLimiter = new RateLimiterRedis({
+      storeClient: redis,
+      keyPrefix: "rl:upload",
+      points: UPLOAD_MAX_ATTEMPTS,
+      duration: UPLOAD_WINDOW_SEC,
+    });
+  } else {
+    uploadLimiter = new RateLimiterMemory({
+      keyPrefix: "rl:upload",
+      points: UPLOAD_MAX_ATTEMPTS,
+      duration: UPLOAD_WINDOW_SEC,
+    });
+  }
+  return uploadLimiter;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /** Check if IP is rate-limited for login attempts. Throws if blocked. */
@@ -359,5 +391,14 @@ export async function checkOAuthRateLimit(ip: string): Promise<void> {
     await getOAuthLimiter().consume(ip);
   } catch {
     throw new Error("TOO_MANY_REQUESTS");
+  }
+}
+
+/** Check file upload rate limit by memberId. Throws if blocked. */
+export async function checkUploadRateLimit(memberId: string): Promise<void> {
+  try {
+    await getUploadLimiter().consume(memberId);
+  } catch {
+    throw new Error("TOO_MANY_UPLOADS");
   }
 }

@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { withAuth } from "@/lib/api-handler";
 
-export async function POST(request: NextRequest) {
-  const session = await getSession();
-
-  if (!session?.memberId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export const POST = withAuth(async (request, session) => {
   const body = await request.json();
   const { endpoint, p256dh, auth } = body;
 
@@ -39,4 +33,4 @@ export async function POST(request: NextRequest) {
   });
 
   return NextResponse.json({ success: true });
-}
+});

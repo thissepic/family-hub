@@ -53,7 +53,7 @@ export function NoteDialog({ open, onOpenChange, noteId }: NoteDialogProps) {
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState("");
-  const [body, setBody] = useState<unknown>(null);
+  const [body, setBody] = useState<Record<string, unknown> | null>(null);
   const [color, setColor] = useState<string | null>(null);
   const [category, setCategory] = useState<string>("");
   const [pinned, setPinned] = useState(false);
@@ -73,7 +73,7 @@ export function NoteDialog({ open, onOpenChange, noteId }: NoteDialogProps) {
   useEffect(() => {
     if (note && isEditing) {
       setTitle(note.title);
-      setBody(note.body);
+      setBody(note.body as Record<string, unknown> | null);
       setColor(note.color);
       setCategory(note.category ?? "");
       setPinned(note.pinned);
@@ -267,7 +267,7 @@ export function NoteDialog({ open, onOpenChange, noteId }: NoteDialogProps) {
                 <Label>{t("body")}</Label>
                 <TiptapEditor
                   content={body}
-                  onChange={setBody}
+                  onChange={(json) => setBody(json as Record<string, unknown>)}
                   placeholder={t("bodyPlaceholder")}
                 />
               </div>
