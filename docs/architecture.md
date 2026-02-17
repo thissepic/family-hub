@@ -23,7 +23,7 @@ This document describes the system architecture, data flow patterns, and compone
 │                                                         │
 │  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
 │  │  App Router  │  │  tRPC Server │  │  API Routes   │  │
-│  │  (pages)     │  │  (16 routers)│  │  (OAuth, push)│  │
+│  │  (pages)     │  │  (17 routers)│  │  (OAuth, push)│  │
 │  └──────┬──────┘  └──────┬───────┘  └───────┬───────┘  │
 │         │                │                   │          │
 │         ▼                ▼                   ▼          │
@@ -43,8 +43,8 @@ This document describes the system architecture, data flow patterns, and compone
        ┌──────────┐ ┌──────────┐ ┌──────────┐
        │PostgreSQL│ │  Redis   │ │ External │
        │  (:5432) │ │  (:6379) │ │ APIs     │
-       │  34 models│ │  Job     │ │ Google   │
-       │  23 enums │ │  queues  │ │ Outlook  │
+       │  41 models│ │  Job     │ │ Google   │
+       │  27 enums │ │  queues  │ │ Outlook  │
        └──────────┘ └──────────┘ │ CalDAV   │
                                  │ EWS      │
                                  └──────────┘
@@ -74,12 +74,13 @@ createTRPCContext()  →  reads session from iron-session cookie
   ▼
 Middleware chain:
   publicProcedure    →  no auth check
-  accountProcedure   →  familyId required (UNAUTHORIZED if missing)
-  protectedProcedure →  full session required (UNAUTHORIZED if missing)
+  userProcedure      →  userId required (UNAUTHORIZED if missing)
+  familyProcedure    →  userId + familyId required (UNAUTHORIZED if missing)
+  protectedProcedure →  full session required: userId + familyId + memberId + role
   adminProcedure     →  full session + ADMIN role (FORBIDDEN if member)
   │
   ▼
-Zod input validation (from *_schemas.ts files)
+Zod input validation
   │
   ▼
 Procedure handler (business logic + Prisma queries)
@@ -144,7 +145,19 @@ src/app/                    Pages (Next.js App Router)
   ├── layout.tsx            Root layout (wraps all providers)
   │     └── Providers:      ThemeProvider, TRPCProvider, SocketProvider, SWRegister
   │
-  ├── (auth)/               Public pages (login, register, profiles, setup, verify-email, reset-password, verify-2fa)
+  ├── (auth)/               Auth pages
+  │     ├── login/          Email/password login
+  │     ├── register/       User account registration
+  │     ├── families/       Family selector (after login)
+  │     ├── create-family/  New family creation wizard
+  │     ├── profiles/       Member profile selection (PIN-based)
+  │     ├── account/        Account settings (email, password, 2FA, OAuth)
+  │     ├── invite/[token]/ Invitation acceptance page
+  │     ├── setup/          First-time setup wizard
+  │     ├── verify-email/   Email verification
+  │     ├── reset-password/ Password reset
+  │     └── verify-2fa/     Two-factor verification
+  │
   ├── (dashboard)/          Protected pages (all modules)
   │     └── layout.tsx      Dashboard layout (Sidebar + TopNav + BottomNav)
   ├── hub/                  Kiosk display (token-protected)
@@ -155,6 +168,10 @@ src/components/             Reusable UI
   ├── ui/                   Primitives (shadcn/ui: Button, Card, Dialog, etc.)
   ├── providers/            Context providers (theme, tRPC, socket, SW)
   ├── layout/               Shell components (Sidebar, TopNav, BottomNav)
+  ├── auth/                 Auth components (login screen, register wizard, family selector, user toolbar)
+  ├── account/              Account settings components
+  ├── family/               Family creation wizard, invitation acceptance
+  ├── settings/             Family settings, invitations panel, member dialog
   └── [module]/             Feature components (calendar, chores, rewards, etc.)
 ```
 
@@ -163,16 +180,20 @@ src/components/             Reusable UI
 ```
 src/lib/
   │
-  ├── auth.ts               Session management (iron-session)
+  ├── auth.ts               Session management (iron-session, 3-layer model)
   ├── db.ts                 Prisma client singleton
   │
   ├── trpc/
-  │   ├── init.ts           tRPC initialization, procedure types
+  │   ├── init.ts           tRPC initialization, 5 procedure types
   │   ├── client.ts         Client-side hooks
-  │   └── routers/          Business logic (16 routers, 112+ procedures)
+  │   └── routers/          Business logic (17 routers)
   │       ├── _app.ts       Root router (combines all routers)
-  │       ├── [module].ts   Module router
-  │       └── [module]_schemas.ts   Zod validation schemas
+  │       ├── account.ts    User authentication & settings
+  │       ├── auth.ts       Session lifecycle (family/profile selection)
+  │       ├── family.ts     Registration, family CRUD
+  │       ├── members.ts    Member management, profile linking
+  │       ├── invitations.ts Family invitation system
+  │       └── [module].ts   Feature routers
   │
   ├── calendar-sync/        External calendar sync engine
   ├── chores/               Chore rotation algorithms
@@ -190,68 +211,89 @@ src/lib/
 
 ### Session Model
 
-Sessions are encrypted cookies managed by iron-session. The system uses a two-layer session model:
+Sessions are encrypted cookies managed by iron-session. The system uses a **three-layer session model**:
 
 ```typescript
-/** Account-level session (after email/password login) */
+/** Layer 1: User-level session (after email/password or OAuth login) */
 interface SessionData {
-  familyId: string;       // UUID of the family
-  memberId?: string;      // Set after profile selection
+  userId: string;       // UUID of the user
+  familyId?: string;    // Set after family selection
+  memberId?: string;    // Set after profile resolution
   role?: "ADMIN" | "MEMBER";
   sessionToken?: string;  // Tracks active session in DB
 }
 
-/** Full session with profile selected (after PIN entry) */
-interface FullSessionData extends SessionData {
+/** Layer 2: Family-level session (user + family selected) */
+interface FamilySessionData extends SessionData {
+  familyId: string;
+}
+
+/** Layer 3: Full session (user + family + member profile resolved) */
+interface FullSessionData extends FamilySessionData {
   memberId: string;
   role: "ADMIN" | "MEMBER";
 }
 ```
 
-- Cookie: `HttpOnly`, `Secure` (production), `SameSite=lax` (required for OAuth redirect flows)
+**Type Guards:**
+- `isUserSession(session)` &mdash; has `userId`
+- `isFamilySession(session)` &mdash; has `userId` + `familyId`
+- `isFullSession(session)` &mdash; has `userId` + `familyId` + `memberId` + `role`
+
+**Session Lifecycle Functions:**
+- `setUserSession(userId, rememberMe)` &mdash; creates Layer 1 session after login
+- `selectFamily(familyId)` &mdash; sets `familyId`, auto-resolves `memberId` if user is linked to a member
+- `upgradeSession(memberId, role)` &mdash; sets `memberId` + `role` (PIN-based profile selection)
+- `downgradeToFamily()` &mdash; removes `memberId` (switch profile within same family)
+- `downgradeToUser()` &mdash; removes `familyId` + `memberId` (switch to different family)
+- `clearSession()` &mdash; full logout
+
+**Cookie properties:**
+- `HttpOnly`, `Secure` (production), `SameSite=lax` (required for OAuth redirect flows)
 - Encryption: AES (iron-session uses `SESSION_SECRET`)
 - TTL: 24 hours (default), 30 days with "Remember Me"
-- Active sessions tracked in `ActiveSession` table for admin visibility
+- Active sessions tracked in `ActiveSession` table for user visibility
 
 ### Authorization Levels
 
-| Level | Middleware | Use |
-|---|---|---|
-| `publicProcedure` | None | Registration, `hasFamily` check, hub data |
-| `accountProcedure` | `familyId` required | Profile listing, profile selection (after email/password login) |
-| `protectedProcedure` | Full session required (`memberId` + `role`) | All standard CRUD operations |
-| `adminProcedure` | Full session + ADMIN role | Family settings, member management, reward/achievement CRUD |
+| Level | Middleware | Required Session | Use |
+|---|---|---|---|
+| `publicProcedure` | None | None | Registration, login, hub data, invitation lookup |
+| `userProcedure` | `userId` required | Layer 1 | Account settings, family listing, 2FA, OAuth, invitation acceptance |
+| `familyProcedure` | `userId` + `familyId` required | Layer 2 | Family details, profile selection |
+| `protectedProcedure` | Full session required | Layer 3 | All standard CRUD operations |
+| `adminProcedure` | Full session + ADMIN role | Layer 3 + ADMIN | Family settings, member management, invitation management |
 
 ### Authentication Flows
 
 ```
 Registration (email/password):
-1. GET /register  →  3-step wizard
-2. Step 1: Email + password + family name + language
-3. Step 2: Admin profile (name, PIN, color)
-4. Step 3: Completion → auto-login → redirect to dashboard
-5. Verification email sent (24h expiry, non-blocking)
+1. GET /register  →  email + password form
+2. POST family.registerUser({ email, password, locale })
+3. Server: hash password, create User, setUserSession(userId)
+4. Verification email sent (24h expiry, non-blocking)
+5. Redirect to /families (create a family or accept invitations)
 
 Registration (OAuth):
 1. GET /register → click "Sign up with Google/Microsoft"
 2. Redirect to provider → user authorizes → callback
 3. If email not linked → store OAuth data in sealed cookie → redirect to /register?oauth=provider
-4. Step 1: Family name (email pre-filled, no password needed)
-5. Step 2: Admin profile (name, PIN, color)
-6. Step 3: Completion → auto-login → emailVerified=true → redirect to dashboard
+4. POST family.registerUserWithOAuth({ locale })
+5. Server: create User + OAuthAccount, emailVerified=true, setUserSession(userId)
+6. Redirect to /families
 
 Login (email/password):
 1. GET /login  →  email + password form
 2. POST account.login({ email, password, rememberMe })
-3. Server: bcrypt.compare(password, family.passwordHash)
-4. If 2FA disabled: setAccountSession(familyId, rememberMe) → redirect to /profiles
-5. If 2FA enabled: createPendingToken(familyId, rememberMe) → redirect to /verify-2fa?token=...
+3. Server: find User, bcrypt.compare(password, user.passwordHash)
+4. If 2FA disabled: setUserSession(userId, rememberMe) → redirect to /families
+5. If 2FA enabled: createPendingToken({ userId, rememberMe }) → redirect to /verify-2fa?token=...
 
 Login (OAuth):
 1. GET /login → click "Sign in with Google/Microsoft"
 2. Redirect to provider → user authorizes → callback
-3. If OAuth identity exists → login → redirect to /profiles
-4. If email matches verified family → auto-link OAuth → login → redirect to /profiles
+3. If OAuth identity exists → setUserSession(userId) → redirect to /families
+4. If email matches verified user → auto-link OAuth → setUserSession(userId) → redirect to /families
 5. If no match → redirect to /register?oauth=provider
 
 Two-Factor Verification:
@@ -259,48 +301,60 @@ Two-Factor Verification:
 2. POST account.verifyTwoFactor({ token, code })
 3. Server: validate pending token (5 min TTL, Redis)
 4. Server: verify TOTP code (±1 time step) or match recovery code (bcrypt)
-5. Success: consume pending token → setAccountSession → redirect to /profiles
+5. Success: consume pending token → setUserSession(userId) → redirect to /families
 
-Profile selection:
-6. GET /profiles  →  account.listMembers()  →  show member avatars
-7. User taps avatar + enters PIN
-8. POST auth.selectProfile({ memberId, pin })
-9. Server: rate-limit check (5 attempts / 15 min per member)
-10. Server: bcrypt.compare(pin, member.pinHash)
-11. Success: upgradeSession(memberId, role)  →  full session cookie
-12. Set locale cookie from member preference
-13. Redirect to dashboard
+Family selection:
+1. GET /families → account.listFamilies() or family.listFamilies() → show family cards
+2. User clicks a family
+3. POST auth.selectFamily({ familyId })
+4. Server: verify user is a member of this family
+5. If user has a linked FamilyMember (userId match) → auto-resolve to full session → redirect to /
+6. If no linked member → set familyId only → redirect to /profiles
+
+Family creation:
+1. GET /create-family → wizard form
+2. POST family.createFamily({ name, locale, adminName, adminColor, adminPin })
+3. Server: create Family + FamilyMember (with userId) + MemberXpProfile
+4. Auto-select the new family → full session → redirect to /
+
+Profile selection (unlinked profiles):
+5. GET /profiles  →  auth members list (via getSession + listMembers)  →  show member avatars
+6. User taps avatar + enters PIN
+7. POST auth.selectProfile({ memberId, pin })
+8. Server: rate-limit check (5 attempts / 15 min per member)
+9. Server: bcrypt.compare(pin, member.pinHash)
+10. Success: upgradeSession(memberId, role) → full session cookie
+11. Set locale cookie from member preference
+12. Redirect to dashboard
+
+Invitation acceptance:
+1. GET /invite/[token] → invitations.getByToken({ token })
+2. If not logged in → redirect to /login (with returnUrl)
+3. If profile-bound invitation (forMember set) → show existing profile info
+4. If regular invitation → show name/color form
+5. POST invitations.accept({ token, memberName?, memberColor? })
+6. Server: create FamilyMember or link existing profile to user
+7. Auto-select family → redirect to /
 
 Profile switching (without re-login):
-- POST auth.switchProfile()  →  downgradeSession()  →  back to /profiles
+- POST auth.switchProfile()  →  downgradeToFamily()  →  back to /profiles
 
-Email verification:
-1. Verification email sent on registration (or resend from dashboard banner)
-2. User clicks link: GET /verify-email?token=...
-3. POST account.verifyEmail({ token })
-4. Server: validate token (type, expiry, not used) → set emailVerified=true
-
-Password reset:
-1. GET /forgot-password → enter email
-2. POST account.requestPasswordReset({ email }) → always returns success (anti-enumeration)
-3. If email exists: send PASSWORD_RESET token (1h expiry)
-4. User clicks link: GET /reset-password?token=...
-5. POST account.resetPassword({ token, newPassword })
-6. Server: update passwordHash, invalidate all active sessions
+Family switching:
+- POST auth.switchFamily()  →  downgradeToUser()  →  back to /families
 ```
 
 ### OAuth Account Linking
 
 ```
-From Settings → Security → Linked Accounts:
+From Account Settings (/account) → Linked Accounts:
 1. User clicks "Link Google/Microsoft" → /api/auth/{provider}?action=link
-2. OAuth state includes familyId → callback creates OAuthAccount record
-3. Redirect back to settings with success message
+2. OAuth state includes userId → callback creates OAuthAccount record
+3. Redirect back to account settings with success message
 
 Safeguards:
 - Cannot unlink the last authentication method
 - OAuth-only accounts can set a password at any time
-- Auto-linking only occurs when OAuth email matches a verified family account
+- Auto-linking only occurs when OAuth email matches a verified user account
 ```
 
 ## Data Flow Patterns
@@ -336,7 +390,7 @@ Server startup (instrumentation.ts)
   │     └── periodic-sync              "*/5 * * * *"   (every 5 minutes)
   │
   └── startEmailWorker()
-        └── Processes email jobs (verification, password reset, email change)
+        └── Processes email jobs (verification, password reset, email change, invitation)
             Concurrency: 2, retries: 3, exponential backoff (3s base)
 ```
 

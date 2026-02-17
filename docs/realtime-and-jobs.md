@@ -138,6 +138,7 @@ Source files: `src/lib/email/queue.ts`, `src/lib/email/worker.ts`, `src/lib/emai
 | `password-reset` | On password reset request | Send password reset link (1h expiry) |
 | `email-change-notification` | On email change | Notify old email address about the change |
 | `email-change-verification` | On email change | Send verification link to new email address |
+| `invitation` | On invitation creation (with email) | Send family invitation email with join link and expiry date |
 
 **Architecture:**
 
@@ -161,6 +162,8 @@ Email Worker (background):
 **Email Templates:**
 
 All emails use responsive HTML with a branded header (Family Hub blue), call-to-action buttons, and fallback plain-text links. Templates support English and German. The language is determined by the family's `defaultLocale`.
+
+The invitation email template includes the family name, the inviter's name, a join link, and the invitation expiry date.
 
 **SMTP Configuration:**
 

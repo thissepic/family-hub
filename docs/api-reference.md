@@ -4,65 +4,76 @@ Family Hub uses [tRPC 11](https://trpc.io/) for its API layer. All procedures ar
 
 ## Authorization
 
-Every procedure uses one of four authorization levels:
+Every procedure uses one of five authorization levels:
 
 | Symbol | Level | Description |
 |---|---|---|
 | -- | `public` | No authentication required |
-| :key: | `account` | Account-level session required (email/password login completed) |
-| :lock: | `protected` | Full session required (account login + profile selected) |
+| :key: | `user` | User-level session required (email/password or OAuth login completed) |
+| :family: | `family` | Family-level session required (user login + family selected) |
+| :lock: | `protected` | Full session required (user login + family selected + member profile selected) |
 | :shield: | `admin` | Full session with ADMIN role required |
+
+The middleware chain is: `public → user → family → protected → admin`. Each level extends the previous one.
 
 ## Routers
 
+Family Hub has **17 tRPC routers** with 120+ procedures.
+
 ### account
 
-Account-level authentication (email/password login, OAuth, 2FA, session management, email verification).
+User account management (login, OAuth, 2FA, session management, email verification, email preferences).
 
 | Procedure | Type | Auth | Description |
 |---|---|---|---|
 | `login` | mutation | public | Authenticate with email + password. Returns `{ requiresTwoFactor, twoFactorToken }` if 2FA is enabled |
 | `verifyTwoFactor` | mutation | public | Verify TOTP code or recovery code using a pending 2FA token |
-| `listMembers` | query | :key: | List family members for profile selection (after account login) |
-| `changePassword` | mutation | :shield: | Change the family account password |
-| `changeEmail` | mutation | :shield: | Change the family account email (requires password, sends verification to new email) |
-| `activeSessions` | query | :shield: | List all active sessions for the family |
-| `invalidateSession` | mutation | :shield: | Remotely invalidate a specific session |
-| `loginAttempts` | query | :shield: | View login attempt history |
+| `listFamilies` | query | :key: | List families the user belongs to (for family selection after login) |
+| `requestPasswordChange` | mutation | :key: | Request a password change (sends verification email with token) |
+| `changeEmail` | mutation | :key: | Change the user account email (requires password, sends verification to new email) |
+| `activeSessions` | query | :key: | List all active sessions for the user |
+| `invalidateSession` | mutation | :key: | Remotely invalidate a specific session |
+| `loginAttempts` | query | :key: | View login attempt history |
 | `verifyEmail` | mutation | public | Verify email address using a token from verification email |
 | `resendVerification` | mutation | :key: | Resend verification email (rate-limited) |
 | `requestPasswordReset` | mutation | public | Request a password reset email (always returns success to prevent enumeration) |
 | `resetPassword` | mutation | public | Reset password using token from email, invalidates all sessions |
-| `setupTwoFactor` | mutation | :shield: | Generate TOTP secret and QR code for 2FA setup (requires email verification) |
-| `confirmTwoFactor` | mutation | :shield: | Verify authenticator code and enable 2FA, returns recovery codes |
-| `disableTwoFactor` | mutation | :shield: | Disable 2FA (requires valid TOTP code) |
-| `regenerateRecoveryCodes` | mutation | :shield: | Generate new recovery codes (requires valid TOTP code) |
-| `getTwoFactorStatus` | query | :shield: | Get 2FA status: enabled, email verified, remaining recovery codes |
-| `getLinkedAccounts` | query | :shield: | List linked OAuth accounts (Google/Microsoft) |
-| `unlinkOAuthAccount` | mutation | :shield: | Unlink an OAuth provider (cannot unlink last auth method) |
-| `setPassword` | mutation | :shield: | Set password for OAuth-only accounts |
+| `setupTwoFactor` | mutation | :key: | Generate TOTP secret and QR code for 2FA setup (requires email verification) |
+| `confirmTwoFactor` | mutation | :key: | Verify authenticator code and enable 2FA, returns recovery codes |
+| `disableTwoFactor` | mutation | :key: | Disable 2FA (requires valid TOTP code) |
+| `regenerateRecoveryCodes` | mutation | :key: | Generate new recovery codes (requires valid TOTP code) |
+| `getTwoFactorStatus` | query | :key: | Get 2FA status: enabled, email verified, remaining recovery codes |
+| `getLinkedAccounts` | query | :key: | List linked OAuth accounts (Google/Microsoft) |
+| `unlinkOAuthAccount` | mutation | :key: | Unlink an OAuth provider (cannot unlink last auth method) |
+| `setPassword` | mutation | :key: | Set password for OAuth-only accounts |
+| `getEmailPreferences` | query | :key: | Get email notification preferences (2FA changes, OAuth linking, email changes) |
+| `updateEmailPreference` | mutation | :key: | Update a specific email notification preference |
 
 ### auth
 
-Profile selection, switching, and session lifecycle.
+Family/profile selection, switching, and session lifecycle.
 
 | Procedure | Type | Auth | Description |
 |---|---|---|---|
-| `selectProfile` | mutation | :key: | Verify PIN and upgrade to full session |
-| `switchProfile` | mutation | :key: | Downgrade full session back to account-level (return to profile selection) |
+| `selectFamily` | mutation | :key: | Select a family and upgrade session to family-level |
+| `selectProfile` | mutation | :family: | Verify PIN and upgrade to full session with member identity |
+| `switchProfile` | mutation | :family: | Downgrade full session back to family-level (return to profile selection) |
+| `switchFamily` | mutation | :key: | Downgrade session back to user-level (return to family selection) |
 | `logout` | mutation | public | Clear session cookie and remove active session |
-| `getSession` | query | public | Return current session data (familyId, memberId, role) |
+| `getSession` | query | public | Return current session data (userId, familyId, memberId, role) |
 | `hasFamily` | query | public | Check if any family exists (used to decide login vs. setup vs. register) |
 
 ### family
 
-Family CRUD, registration, and settings.
+Family CRUD, user registration, and settings.
 
 | Procedure | Type | Auth | Description |
 |---|---|---|---|
-| `get` | query | :lock: | Get family details with all members |
-| `register` | mutation | public | Register a new family with email/password + admin profile (rate-limited, sends verification email) |
-| `registerWithOAuth` | mutation | public | Register a new family via OAuth (consumes pending OAuth cookie, auto-verifies email) |
+| `get` | query | :family: | Get family details with all members |
+| `registerUser` | mutation | public | Register a new user account with email + password (rate-limited, sends verification email) |
+| `registerUserWithOAuth` | mutation | public | Register a new user account via OAuth (consumes pending OAuth cookie, auto-verifies email) |
+| `createFamily` | mutation | :key: | Create a new family and become its admin (user must be logged in) |
+| `listFamilies` | query | :key: | List all families the user belongs to |
 | `update` | mutation | :shield: | Update family name, locale, theme |
 | `deleteFamily` | mutation | :shield: | Delete the entire family and all associated data (requires confirmation) |
 
@@ -72,13 +83,28 @@ Manage family members.
 
 | Procedure | Type | Auth | Description |
 |---|---|---|---|
-| `list` | query | :lock: | List all members of the family |
+| `list` | query | :lock: | List all members of the family (includes userId for linked status) |
 | `update` | mutation | :lock: | Update member profile (members can update self, admins can update anyone) |
-| `adminCreate` | mutation | :shield: | Admin-initiated member creation with automatic XP profile setup |
+| `adminCreate` | mutation | :shield: | Admin-initiated member creation with optional email and automatic XP profile setup |
+| `linkProfile` | mutation | :key: | Link the current user account to an existing unlinked member profile |
 | `updateRole` | mutation | :shield: | Change member role ADMIN/MEMBER (safeguard: cannot demote last admin) |
 | `adminResetPin` | mutation | :shield: | Reset another member's PIN |
 | `delete` | mutation | :shield: | Remove a member (safeguard: cannot delete last admin) |
 | `changePin` | mutation | :lock: | Change own PIN (requires current PIN verification) |
+
+### invitations
+
+Family invitation management (invite users to join a family).
+
+| Procedure | Type | Auth | Description |
+|---|---|---|---|
+| `create` | mutation | :shield: | Create an invitation to join the family. Optionally for a specific unlinked profile (`forMemberId`). Sends email if address provided |
+| `list` | query | :shield: | List pending/recent invitations for the current family |
+| `revoke` | mutation | :shield: | Revoke a pending invitation (marks as EXPIRED) |
+| `getByToken` | query | public | Get invitation details by token (for the accept/decline page) |
+| `accept` | mutation | :key: | Accept an invitation. Creates a new member or links to existing profile if `forMemberId` is set |
+| `decline` | mutation | :key: | Decline an invitation |
+| `myPendingInvitations` | query | :key: | List pending invitations for the current user (matched by email, across all families) |
 
 ### calendar
 

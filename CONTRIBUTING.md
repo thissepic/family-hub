@@ -97,6 +97,25 @@ Thank you for your interest in contributing! Family Hub is a community-driven pr
 - Use **tRPC** for all API endpoints
 - Keep business logic in `src/lib/`, UI logic in `src/components/`
 
+## Authentication & Authorization
+
+Family Hub uses a **three-layer session model** (User → Family → Member) with five tRPC middleware levels:
+
+| Middleware | Use When |
+|---|---|
+| `publicProcedure` | No authentication needed (login, registration, public data) |
+| `userProcedure` | User is logged in but may not have selected a family (account settings, family selection) |
+| `familyProcedure` | User has selected a family but not a member profile (family-level data) |
+| `protectedProcedure` | Full session with member profile selected (most feature endpoints) |
+| `adminProcedure` | Full session with ADMIN role (management endpoints) |
+
+When creating new routers or procedures, choose the most appropriate middleware level. See `src/lib/trpc/init.ts` for definitions and `src/lib/auth.ts` for session types.
+
+Key component directories:
+- `src/components/account/` &mdash; User account settings (2FA, OAuth, sessions, email preferences)
+- `src/components/family/` &mdash; Family management (invitations, family selection)
+- `src/components/settings/` &mdash; Family-level settings (members, chores, rewards)
+
 ## Translations
 
 Family Hub supports English and German. When adding user-facing strings:

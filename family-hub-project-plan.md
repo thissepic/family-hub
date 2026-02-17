@@ -1,5 +1,7 @@
 # Family Hub — Project Plan
 
+> **Note (February 2026):** The authentication model described in this original planning document has been significantly reworked. The initial design used a single-layer family-based auth model (one family = one email/password + member PINs). The implemented system uses a **three-layer model**: User Account (email/password or OAuth, 2FA) → Family Selection (multi-family support) → Member Profile (PIN). User accounts are fully decoupled from families, enabling multi-family membership and a family invitation system. Sections below describing authentication, the database schema, and the setup wizard reflect the original design intent, not the current implementation. See `docs/architecture.md` and `docs/database.md` for the current architecture.
+
 ## 1. Vision
 
 A self-hosted web application that acts as a centralized command center for family life. It replaces scattered group chats, sticky notes, and spreadsheets with a single place the whole family opens every day. Designed as a **Progressive Web App (PWA)** so it installs on any phone, tablet, or desktop like a native app — no app store needed. A dedicated TV/kiosk mode turns any screen into an always-on family dashboard.

@@ -4,8 +4,8 @@ Family Hub uses PostgreSQL 16 with Prisma 6 as the ORM. The schema is defined in
 
 ## Overview
 
-- **37 models** across 8 domains
-- **26 enums** for type-safe status fields
+- **41 models** across 9 domains
+- **27 enums** for type-safe status fields
 - All IDs are UUIDs (`@default(cuid())`)
 - Timestamps: `createdAt` / `updatedAt` on all models
 - Cascading deletes where appropriate (family deletion removes all child data)
@@ -13,9 +13,22 @@ Family Hub uses PostgreSQL 16 with Prisma 6 as the ORM. The schema is defined in
 ## Entity Relationship Diagram
 
 ```
+User (1)
+  │
+  ├── (1:N) FamilyMember (via userId)
+  ├── (1:N) OAuthAccount
+  ├── (1:N) EmailToken
+  ├── (1:N) TwoFactorRecoveryCode
+  ├── (1:N) LoginAttempt
+  ├── (1:N) ActiveSession
+  └── (1:N) EmailPreference
+
 Family (1)
   │
   ├── (1:N) FamilyMember
+  │           ├── (N:1) User (optional, via userId)
+  │           ├── (1:N) FamilyInvitation (as invitedBy)
+  │           ├── (1:N) FamilyInvitation (as forMember, optional)
   │           ├── (1:N) CalendarEvent (createdById)
   │           ├── (1:N) EventAssignee
   │           ├── (1:N) Task (createdById)
@@ -35,6 +48,7 @@ Family (1)
   │           ├── (1:N) PushSubscription
   │           └── (1:N) ActivityEvent
   │
+  ├── (1:N) FamilyInvitation
   ├── (1:N) CalendarEvent
   ├── (1:N) Task
   ├── (1:N) Chore
@@ -54,24 +68,35 @@ Family (1)
   ├── (1:N) FamilyGoal
   ├── (1:1) XpSettings
   ├── (1:1) HubDisplaySettings
-  ├── (1:N) ActivityEvent
-  ├── (1:N) OAuthAccount
-  ├── (1:N) EmailToken
-  ├── (1:N) TwoFactorRecoveryCode
-  ├── (1:N) LoginAttempt
-  └── (1:N) ActiveSession
+  └── (1:N) ActivityEvent
 ```
 
 ## Core Models
+
+### User (Authentication)
+
+| Model | Purpose | Key Fields |
+|---|---|---|
+| **User** | Standalone user account (decoupled from families) | `email` (unique), `passwordHash` (nullable for OAuth-only), `emailVerified`, `twoFactorEnabled`, `twoFactorSecret` (encrypted), `defaultLocale`, `theme` |
+
+A user registers with an email and password (bcrypt-hashed) or via OAuth (Google/Microsoft), in which case `passwordHash` is null. Users can belong to multiple families. If 2FA is enabled, `twoFactorSecret` stores the encrypted TOTP secret.
 
 ### Family & Members
 
 | Model | Purpose | Key Fields |
 |---|---|---|
-| **Family** | Root entity for a household | `name`, `email` (unique), `passwordHash` (nullable for OAuth-only), `emailVerified`, `twoFactorEnabled`, `twoFactorSecret` (encrypted), `defaultLocale`, `theme` |
-| **FamilyMember** | A person in the family | `name`, `pinHash`, `role` (ADMIN/MEMBER), `avatar`, `color`, `locale`, `themePreference` |
+| **Family** | Root entity for a household | `name`, `defaultLocale`, `theme` |
+| **FamilyMember** | A person in the family, optionally linked to a User | `name`, `userId` (optional FK to User), `pinHash` (nullable), `role` (ADMIN/MEMBER), `avatar`, `color`, `locale`, `themePreference` |
 
-A family registers with an email and password (bcrypt-hashed) or via OAuth (Google/Microsoft), in which case `passwordHash` is null. Each member has a bcrypt-hashed PIN for profile authentication and an optional personal locale override. If 2FA is enabled, `twoFactorSecret` stores the encrypted TOTP secret.
+A family has no authentication fields &mdash; all auth is on the User model. Members with `userId` set are linked to a user account and can log in directly. Unlinked members (`userId = null`) use a bcrypt-hashed PIN for profile authentication. The `@@unique([familyId, userId])` constraint ensures one user has at most one profile per family.
+
+### Family Invitations
+
+| Model | Purpose | Key Fields |
+|---|---|---|
+| **FamilyInvitation** | Invite someone to join a family | `familyId`, `email` (optional), `role`, `token` (unique), `status` (InvitationStatus), `invitedById` (FK to FamilyMember), `forMemberId` (optional FK to FamilyMember), `expiresAt`, `acceptedAt` |
+
+Invitations can be created with or without an email. If `email` is set, an invitation email is sent. If `forMemberId` is set, accepting the invitation links the user to the existing unlinked member profile instead of creating a new one. Indexed on `familyId`, `token`, `email`, and `forMemberId`.
 
 ### Calendar
 
@@ -158,28 +183,31 @@ See [Rewards System](./rewards-system.md) for details on the XP engine.
 |---|---|---|
 | **HubDisplaySettings** | Kiosk configuration | `visiblePanels` (JSON), `layoutMode`, `rotationEnabled`, `rotationIntervalSec`, `theme`, `fontScale`, `nightDimEnabled`, `weatherEnabled`, `accessToken` |
 
-### OAuth & Email Tokens
+### OAuth, Tokens & Email Preferences
 
 | Model | Purpose | Key Fields |
 |---|---|---|
-| **OAuthAccount** | Links a family to an OAuth provider identity | `familyId`, `provider` (GOOGLE/MICROSOFT), `providerAccountId`, `email`, `displayName` |
-| **EmailToken** | Hashed tokens for email verification, password reset, and email change | `familyId`, `tokenHash` (unique, SHA-256), `type` (VERIFICATION/PASSWORD_RESET/EMAIL_CHANGE), `expiresAt`, `usedAt`, `metadata` (JSON) |
-| **TwoFactorRecoveryCode** | Bcrypt-hashed single-use recovery codes for 2FA | `familyId`, `codeHash`, `usedAt` |
+| **OAuthAccount** | Links a user to an OAuth provider identity | `userId`, `provider` (GOOGLE/MICROSOFT), `providerAccountId`, `email`, `displayName` |
+| **EmailToken** | Hashed tokens for email verification, password reset, and email change | `userId`, `tokenHash` (unique, SHA-256), `type` (VERIFICATION/PASSWORD_RESET/EMAIL_CHANGE), `expiresAt`, `usedAt`, `metadata` (JSON) |
+| **TwoFactorRecoveryCode** | Bcrypt-hashed single-use recovery codes for 2FA | `userId`, `codeHash`, `usedAt` |
+| **EmailPreference** | Per-user email notification settings | `userId`, `type` (EmailNotificationType), `enabled` |
 
-`OAuthAccount` has a composite unique constraint on `(provider, providerAccountId)` and is indexed on `(provider, email)`. When a family registers or logs in via OAuth, the provider identity is stored here. A family can have multiple linked OAuth accounts.
+`OAuthAccount` has a composite unique constraint on `(provider, providerAccountId)` and is indexed on `(provider, email)`. When a user registers or logs in via OAuth, the provider identity is stored here. A user can have multiple linked OAuth accounts.
 
 `EmailToken` stores SHA-256 hashed tokens (raw tokens are sent via email). Old unused tokens of the same type are auto-deleted when a new token is created. Token TTLs: VERIFICATION (24h), PASSWORD_RESET (1h), EMAIL_CHANGE (24h).
 
-`TwoFactorRecoveryCode` stores 10 bcrypt-hashed codes per family. Codes are single-use (marked with `usedAt` on consumption). All codes are regenerated at once.
+`TwoFactorRecoveryCode` stores 10 bcrypt-hashed codes per user. Codes are single-use (marked with `usedAt` on consumption). All codes are regenerated at once.
+
+`EmailPreference` has a unique constraint on `(userId, type)`. Controls which security notification emails (2FA status changes, OAuth linking, email changes) are sent.
 
 ### Security & Sessions
 
 | Model | Purpose | Key Fields |
 |---|---|---|
-| **LoginAttempt** | Tracks login attempts for rate limiting | `familyId`, `email`, `ipAddress`, `userAgent`, `success`, `failureReason` |
-| **ActiveSession** | Tracks active authenticated sessions | `familyId`, `memberId`, `sessionToken` (unique), `ipAddress`, `userAgent`, `lastActivity`, `expiresAt` |
+| **LoginAttempt** | Tracks login attempts for rate limiting | `userId`, `email`, `ipAddress`, `userAgent`, `success`, `failureReason` |
+| **ActiveSession** | Tracks active authenticated sessions | `userId`, `familyId` (optional), `memberId` (optional), `sessionToken` (unique), `ipAddress`, `userAgent`, `lastActivity`, `expiresAt` |
 
-Login attempts are indexed by `email`, `ipAddress`, and `createdAt` for efficient rate limiting lookups. Active sessions are tracked to allow admins to view and invalidate sessions remotely.
+Login attempts are indexed by `email`, `ipAddress`, and `createdAt` for efficient rate limiting lookups. Active sessions are tracked to allow users to view and invalidate sessions remotely from Account Settings.
 
 ## Enums Reference
 
@@ -188,6 +216,7 @@ Login attempts are indexed by `email`, `ipAddress`, and `createdAt` for efficien
 | Enum | Values |
 |---|---|
 | `MemberRole` | `ADMIN`, `MEMBER` |
+| `InvitationStatus` | `PENDING`, `ACCEPTED`, `DECLINED`, `EXPIRED` |
 | `ConnectionStatus` | `ACTIVE`, `EXPIRED`, `REVOKED` |
 | `ChoreInstanceStatus` | `PENDING`, `DONE`, `PENDING_REVIEW`, `OVERDUE`, `SKIPPED` |
 | `SwapRequestStatus` | `PENDING`, `ACCEPTED`, `DECLINED` |
@@ -215,6 +244,7 @@ Login attempts are indexed by `email`, `ipAddress`, and `createdAt` for efficien
 |---|---|
 | `OAuthProvider` | `GOOGLE`, `MICROSOFT` |
 | `EmailTokenType` | `VERIFICATION`, `PASSWORD_RESET`, `EMAIL_CHANGE` |
+| `EmailNotificationType` | `TWO_FACTOR_ENABLED`, `TWO_FACTOR_DISABLED`, `OAUTH_LINKED`, `OAUTH_UNLINKED`, `EMAIL_CHANGE_NOTIFICATION` |
 
 ### Configuration Enums
 
@@ -250,7 +280,7 @@ npx prisma migrate reset
 npx prisma db seed
 ```
 
-The seed script is defined in `packages/db/seed.ts` and configured in `package.json` under the `prisma.seed` key.
+The seed script is defined in `packages/db/seed.ts` and configured in `prisma.config.ts`.
 
 ### Prisma Studio
 

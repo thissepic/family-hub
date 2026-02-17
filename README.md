@@ -6,6 +6,7 @@ Built for households of 6+ members. Deployable on a Raspberry Pi or a small VPS.
 
 ## Features
 
+- **Multi-Family Support** &mdash; Users can belong to multiple families with a single account, switching between them seamlessly
 - **Shared Calendar** &mdash; Family events with recurrence support and external sync (Google, Apple/CalDAV, Outlook, Exchange)
 - **Daily Tasks** &mdash; Personal task management with templates and history
 - **Household Chores** &mdash; Rotating chore assignments with fairness tracking (round-robin, random, weighted)
@@ -17,9 +18,10 @@ Built for households of 6+ members. Deployable on a Raspberry Pi or a small VPS.
 - **Hub Display** &mdash; TV/kiosk mode showing panels for clock, schedule, chores, meals, and more
 - **Notifications** &mdash; In-app and Web Push notifications with per-member preferences
 - **Global Search** &mdash; Full-text search across all modules (Cmd/Ctrl+K)
-- **Registration & Setup** &mdash; Account registration wizard and guided first-time family configuration
+- **Family Invitations** &mdash; Invite users to join a family via email link, optionally linking to an existing unlinked profile
+- **Registration & User Accounts** &mdash; User account registration with email/password or OAuth, independent from family membership
 - **OAuth Sign-In** &mdash; Sign in or register with Google or Microsoft accounts
-- **Two-Factor Authentication** &mdash; TOTP-based 2FA with recovery codes for account security
+- **Two-Factor Authentication** &mdash; TOTP-based 2FA with recovery codes for user account security
 - **Email Verification** &mdash; Email address verification, password reset, and email change flows via SMTP
 
 ## Tech Stack
@@ -33,7 +35,7 @@ Built for households of 6+ members. Deployable on a Raspberry Pi or a small VPS.
 | Database | [PostgreSQL 16](https://www.postgresql.org/) via [Prisma 6](https://www.prisma.io/) |
 | Real-time | [Socket.IO 4](https://socket.io/) |
 | Background Jobs | [BullMQ 5](https://docs.bullmq.io/) + [Redis 7](https://redis.io/) |
-| Auth | Two-layer (email/password + PIN) via [iron-session](https://github.com/vvo/iron-session) + bcrypt, OAuth (Google/Microsoft), 2FA ([otplib](https://github.com/yeojz/otplib)) |
+| Auth | Three-layer (user account + family selection + member profile) via [iron-session](https://github.com/vvo/iron-session) + bcrypt, OAuth (Google/Microsoft), 2FA ([otplib](https://github.com/yeojz/otplib)) |
 | Email | [nodemailer](https://nodemailer.com/) via BullMQ queue |
 | Calendar | [FullCalendar 6](https://fullcalendar.io/) + [rrule](https://github.com/jkbrzt/rrule) |
 | Rich Text | [Tiptap 3](https://tiptap.dev/) |
@@ -48,7 +50,11 @@ family-hub/
 ├── packages/db/prisma/       # Prisma schema, migrations, seed
 ├── src/
 │   ├── app/
-│   │   ├── (auth)/           # Login, registration & setup wizard pages
+│   │   ├── (auth)/           # Auth pages: login, registration, profile/family selection
+│   │   │   ├── families/     # Family selection & management
+│   │   │   ├── create-family/# New family creation wizard
+│   │   │   ├── account/      # User account settings (2FA, OAuth, email, sessions)
+│   │   │   └── invite/       # Invitation accept/decline page
 │   │   ├── (dashboard)/      # Protected pages (calendar, tasks, chores, etc.)
 │   │   ├── hub/              # TV/kiosk display mode
 │   │   ├── offline/          # PWA offline fallback
@@ -57,9 +63,11 @@ family-hub/
 │   │   ├── ui/               # shadcn/ui primitives
 │   │   ├── providers/        # Theme, tRPC, Socket.IO, service worker providers
 │   │   ├── layout/           # Sidebar, TopNav, BottomNav
+│   │   ├── account/          # Account settings components (2FA, OAuth, sessions)
+│   │   ├── family/           # Family management & invitation components
 │   │   └── [module]/         # Feature-specific components
 │   ├── lib/
-│   │   ├── trpc/routers/     # tRPC routers per module
+│   │   ├── trpc/routers/     # 17 tRPC routers per module
 │   │   ├── calendar-sync/    # External calendar sync engine
 │   │   ├── chores/           # Rotation & scheduling logic
 │   │   ├── rewards/          # XP engine & constants
@@ -67,7 +75,7 @@ family-hub/
 │   │   ├── socket/           # Socket.IO server & events
 │   │   ├── maintenance/      # Background job coordination (BullMQ)
 │   │   ├── email/            # SMTP transporter, templates, BullMQ queue & worker
-│   │   ├── auth.ts           # Session management
+│   │   ├── auth.ts           # Session management (3-layer: user → family → member)
 │   │   ├── oauth-auth.ts     # OAuth sign-in/link/register logic
 │   │   ├── two-factor.ts     # TOTP generation, verification, recovery codes
 │   │   └── db.ts             # Prisma client singleton
@@ -135,7 +143,7 @@ npx prisma db seed
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The setup wizard will guide you through creating your family on first visit.
+Open [http://localhost:3000](http://localhost:3000). You'll be guided through creating a user account and your first family.
 
 ## Production Deployment (Docker)
 
@@ -269,26 +277,43 @@ Sync supports inbound-only or two-way modes with configurable privacy (full deta
 
 ## Authentication
 
-Family Hub uses a two-layer authentication system:
+Family Hub uses a three-layer authentication system that decouples user accounts from families:
 
-1. **Account login** &mdash; Each family registers with an email and password (or via OAuth with Google/Microsoft). On login, the family account is authenticated and a secure session is created.
-2. **Two-factor authentication (optional)** &mdash; If 2FA is enabled, the user must enter a TOTP code from an authenticator app (or a recovery code) before the session is granted.
-3. **Profile selection** &mdash; After account login, the user selects their family member profile and enters a personal PIN (hashed with bcrypt). This upgrades the session to a full session with member identity and role.
-4. A 24-hour encrypted session cookie is set via iron-session (extendable to 30 days with "Remember Me"). Cookies use `SameSite=lax` to support OAuth redirect flows.
-5. Two roles: **Admin** (full management) and **Member** (personal use).
-6. Rate limiting protects against brute-force attacks (5 login attempts per 15 min, account lockout after 10 failures, 5 PIN attempts per 15 min per member, 5 TOTP attempts per 15 min).
+1. **User login** &mdash; Users register with an email and password (or via OAuth with Google/Microsoft). On login, the user account is authenticated and a user-level session is created. Users are redirected to `/families` to select a family.
+2. **Two-factor authentication (optional)** &mdash; If 2FA is enabled on the user account, the user must enter a TOTP code from an authenticator app (or a recovery code) before the session is granted.
+3. **Family selection** &mdash; The user selects which family to interact with. Users can belong to multiple families. This upgrades the session to a family-level session.
+4. **Profile selection** &mdash; After selecting a family, the user selects their member profile and enters a personal PIN (hashed with bcrypt). This upgrades the session to a full session with member identity and role.
+5. A 24-hour encrypted session cookie is set via iron-session (extendable to 30 days with "Remember Me"). Cookies use `SameSite=lax` to support OAuth redirect flows.
+6. Two roles: **Admin** (full management) and **Member** (personal use).
+7. Rate limiting protects against brute-force attacks (5 login attempts per 15 min, account lockout after 10 failures, 5 PIN attempts per 15 min per member, 5 TOTP attempts per 15 min).
+
+### Multi-Family Support
+
+A single user account can belong to multiple families. After logging in, users see a family selection page listing all their families. Users can:
+
+- Create new families
+- Accept invitations to join existing families
+- Switch between families without logging out
+
+### Family Invitations
+
+Admins can invite new users to join their family:
+
+- **Email invitations** &mdash; An invitation email with a unique link is sent. The recipient creates a user account (or logs in) and joins the family.
+- **Link-only invitations** &mdash; A shareable invitation link without a specific email. Anyone with the link can accept.
+- **Profile-bound invitations** &mdash; Admins can create invitations for specific unlinked member profiles. When accepted, the user's account is linked to the existing profile (preserving XP, chore history, etc.) instead of creating a new member.
 
 ### OAuth Sign-In
 
-Families can register or sign in using Google or Microsoft accounts via OAuth 2.0. OAuth uses the same client credentials as calendar sync but with separate redirect URIs (`/api/auth/google/callback`, `/api/auth/microsoft/callback`).
+Users can register or sign in using Google or Microsoft accounts via OAuth 2.0. OAuth uses the same client credentials as calendar sync but with separate redirect URIs (`/api/auth/google/callback`, `/api/auth/microsoft/callback`).
 
-- **New registration:** OAuth redirects to the registration wizard with email pre-filled and password step skipped. Email is automatically marked as verified.
-- **Existing account:** If the OAuth email matches a verified family account, the OAuth identity is auto-linked and the user is logged in.
-- **Account linking:** Existing families can link/unlink OAuth providers in Settings. OAuth-only accounts can set a password later.
+- **New registration:** OAuth redirects to the registration flow. A user account is created with the OAuth identity linked. Email is automatically marked as verified.
+- **Existing account:** If the OAuth email matches a verified user account, the OAuth identity is auto-linked and the user is logged in.
+- **Account linking:** Users can link/unlink OAuth providers in Account Settings. OAuth-only accounts can set a password later.
 
 ### Two-Factor Authentication (2FA)
 
-Admins can enable TOTP-based two-factor authentication in Settings &rarr; Security. Requires email verification first.
+Any user can enable TOTP-based two-factor authentication in Account Settings (`/account`). Requires email verification first.
 
 - **Setup:** Scan QR code with any authenticator app (Google Authenticator, Authy, etc.), verify with a 6-digit code.
 - **Recovery codes:** 10 single-use recovery codes (format: `XXXX-XXXX`) are generated on setup. Download and store them securely.
@@ -301,12 +326,12 @@ Email verification, password reset, and email change flows require SMTP configur
 
 - **Verification:** A verification email is sent on registration. An unverified-email banner appears on the dashboard until verified. Tokens expire after 24 hours.
 - **Password reset:** Users request a reset at `/forgot-password`. A reset link (1h expiry) is emailed. After reset, all active sessions are invalidated.
-- **Email change:** Admins can change the account email in Settings. A notification is sent to the old email and a verification link to the new one.
+- **Email change:** Users can change their account email in Account Settings. A notification is sent to the old email and a verification link to the new one.
 - **Development:** Use `npx maildev` for a local SMTP server (port 1025) with a web UI on port 1080.
 
 Emails are sent via a BullMQ queue with 3 retry attempts. The app functions without SMTP &mdash; email features are silently disabled.
 
-The registration wizard guides new families through account creation (email/password or OAuth), admin profile setup, and initial configuration.
+Registration creates a user account with email and password (or OAuth). After registration, the user is guided to create their first family or accept a pending invitation.
 
 ## PWA & Offline Support
 
@@ -324,7 +349,7 @@ Two languages are supported out of the box:
 - English (`messages/en.json`)
 - German (`messages/de.json`)
 
-Locale is determined by: member preference > family default > `en`. The preference is stored as a cookie and can be changed per member in settings.
+Locale is determined by: member preference > family default > user default > `en`. The preference is stored as a cookie and can be changed per member in settings.
 
 ## Documentation
 
@@ -333,8 +358,8 @@ Detailed documentation is available in the [`docs/`](./docs/) directory:
 | Document | Description |
 |---|---|
 | [Architecture](./docs/architecture.md) | System overview, request flow, data flow patterns, provider architecture |
-| [Database Schema](./docs/database.md) | All 34 models, 23 enums, relationships, and management commands |
-| [API Reference](./docs/api-reference.md) | All 16 tRPC routers with 112+ procedures, authorization levels |
+| [Database Schema](./docs/database.md) | All 41 models, 27 enums, relationships, and management commands |
+| [API Reference](./docs/api-reference.md) | All 17 tRPC routers with 120+ procedures, authorization levels |
 | [Chore Rotation](./docs/chore-rotation.md) | Rotation algorithms, period calculation, swap workflow, instance lifecycle |
 | [Rewards System](./docs/rewards-system.md) | XP engine, streak multipliers, achievements, reward redemption |
 | [Calendar Sync](./docs/calendar-sync.md) | OAuth flows, provider adapters, sync tokens, privacy modes |
