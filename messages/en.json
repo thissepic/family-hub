@@ -124,7 +124,8 @@
     "oauthStepFamilyTitle": "Your Family",
     "oauthStepFamilyDescription": "Set up your family name and language.",
     "oauthVerificationNote": "Your email has been verified by {provider}.",
-    "oauthSessionExpired": "OAuth session expired. Please try again."
+    "oauthSessionExpired": "OAuth session expired. Please try again.",
+    "continueToInvitation": "Continue to Invitation"
   },
   "createFamily": {
     "title": "Create a Family",
@@ -159,7 +160,11 @@
     "joining": "Joining...",
     "acceptAndJoin": "Accept & Join",
     "joinAsProfile": "You'll join as {name}",
-    "description": "{invitedBy} has invited you to join the family \"{familyName}\"."
+    "description": "{invitedBy} has invited you to join the family \"{familyName}\".",
+    "loginRequired": "You need to sign in or create an account to accept this invitation.",
+    "loginToAccept": "Sign In",
+    "createAccountToAccept": "Create Account",
+    "emailWarning": "This invitation was sent to {email}. Please use the same email address when signing in or creating your account to avoid errors."
   },
   "invitationsPanel": {
     "title": "Invitations",

@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ShieldCheck, Loader2 } from "lucide-react";
 import Link from "next/link";
 
-export function TwoFactorVerifyScreen({ token }: { token: string }) {
+export function TwoFactorVerifyScreen({ token, redirectTo }: { token: string; redirectTo?: string }) {
   const t = useTranslations("auth");
   const router = useRouter();
   const trpc = useTRPC();
@@ -30,7 +30,7 @@ export function TwoFactorVerifyScreen({ token }: { token: string }) {
             t("recoveryCodeWarning", { count: data.remainingCodes })
           );
         }
-        router.push("/families");
+        router.push(redirectTo || "/families");
         router.refresh();
       },
       onError: (err) => {

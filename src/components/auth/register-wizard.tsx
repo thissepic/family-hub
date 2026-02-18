@@ -13,7 +13,7 @@ import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { PartyPopper, Eye, EyeOff, Mail, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
-export function RegisterWizard() {
+export function RegisterWizard({ redirectTo }: { redirectTo?: string }) {
   const t = useTranslations("register");
   const tAuth = useTranslations("auth");
   const router = useRouter();
@@ -92,7 +92,7 @@ export function RegisterWizard() {
   };
 
   const handleContinue = () => {
-    router.push("/families");
+    router.push(redirectTo || "/families");
     router.refresh();
   };
 
@@ -121,7 +121,7 @@ export function RegisterWizard() {
                 className="w-full"
                 size="lg"
               >
-                {t("goToDashboard")}
+                {redirectTo ? t("continueToInvitation") : t("goToDashboard")}
               </Button>
             </CardContent>
           </Card>
@@ -153,7 +153,7 @@ export function RegisterWizard() {
             {/* Standard registration: show OAuth buttons + divider + email/password */}
             {!isOAuth && (
               <>
-                <OAuthButtons mode="register" />
+                <OAuthButtons mode="register" redirectTo={redirectTo} />
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -284,7 +284,7 @@ export function RegisterWizard() {
 
             <p className="text-sm text-center text-muted-foreground">
               {t("alreadyHaveAccount")}{" "}
-              <Link href="/login" className="text-primary hover:underline">
+              <Link href={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : "/login"} className="text-primary hover:underline">
                 {t("loginInstead")}
               </Link>
             </p>

@@ -39,6 +39,12 @@ export async function GET(request: NextRequest) {
     stateData.userId = session.userId;
   }
 
+  // Preserve redirect parameter for post-auth redirect (e.g., invite flow)
+  const redirectParam = request.nextUrl.searchParams.get("redirect");
+  if (redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//")) {
+    stateData.redirectTo = redirectParam;
+  }
+
   const state = await sealData(stateData, {
     password: process.env.SESSION_SECRET!,
     ttl: 600, // 10 min

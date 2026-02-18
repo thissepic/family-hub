@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ColorPicker } from "@/components/setup/color-picker";
+import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 export function AcceptInvitation({ token }: { token: string }) {
@@ -22,7 +23,13 @@ export function AcceptInvitation({ token }: { token: string }) {
   const [memberColor, setMemberColor] = useState("#3b82f6");
   const [error, setError] = useState("");
 
-  const { data: invitation, isLoading } = useQuery(
+  const { data: session, isLoading: sessionLoading } = useQuery(
+    trpc.auth.getSession.queryOptions()
+  );
+
+  const isAuthenticated = !!session?.userId;
+
+  const { data: invitation, isLoading: invitationLoading } = useQuery(
     trpc.invitations.getByToken.queryOptions({ token })
   );
 
@@ -75,6 +82,7 @@ export function AcceptInvitation({ token }: { token: string }) {
   };
 
   const isPending = acceptMutation.isPending || selectFamilyMutation.isPending;
+  const isLoading = sessionLoading || invitationLoading;
 
   if (isLoading) {
     return (
@@ -100,6 +108,56 @@ export function AcceptInvitation({ token }: { token: string }) {
             </Button>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // Unauthenticated: show login/register options
+  if (!isAuthenticated) {
+    const redirectPath = `/invite/${token}`;
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <div className="w-full max-w-md">
+          <Card>
+            <CardHeader className="text-center">
+              <div className="text-4xl mb-2">🎉</div>
+              <CardTitle>{t("title")}</CardTitle>
+              <CardDescription>
+                {t("description", {
+                  familyName: invitation.familyName,
+                  invitedBy: invitation.invitedByName,
+                })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {invitation.email && (
+                <div className="flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    {t("emailWarning", { email: invitation.email })}
+                  </p>
+                </div>
+              )}
+
+              <p className="text-sm text-center text-muted-foreground">
+                {t("loginRequired")}
+              </p>
+
+              <div className="flex flex-col gap-2">
+                <Button asChild className="w-full">
+                  <Link href={`/login?redirect=${encodeURIComponent(redirectPath)}`}>
+                    {t("loginToAccept")}
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="w-full">
+                  <Link href={`/register?redirect=${encodeURIComponent(redirectPath)}`}>
+                    {t("createAccountToAccept")}
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

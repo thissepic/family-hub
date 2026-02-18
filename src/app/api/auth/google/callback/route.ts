@@ -73,12 +73,16 @@ export async function GET(request: NextRequest) {
       }
 
       await handleOAuthLogin(result.userId, userInfo.email);
-      return NextResponse.redirect(new URL("/families", appUrl));
+      const loginTarget = stateData.redirectTo || "/families";
+      return NextResponse.redirect(new URL(loginTarget, appUrl));
     }
 
     // New user → store pending data and redirect to registration
     await storeOAuthPending(userInfo);
-    return NextResponse.redirect(new URL("/register?oauth=google", appUrl));
+    const registerUrl = stateData.redirectTo
+      ? `/register?oauth=google&redirect=${encodeURIComponent(stateData.redirectTo)}`
+      : "/register?oauth=google";
+    return NextResponse.redirect(new URL(registerUrl, appUrl));
   } catch (err) {
     console.error("[OAuth] Google auth callback failed:", err instanceof Error ? err.message : "Unknown error");
     return NextResponse.redirect(new URL("/login?error=oauth_failed", appUrl));

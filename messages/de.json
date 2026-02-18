@@ -124,7 +124,8 @@
     "oauthStepFamilyTitle": "Deine Familie",
     "oauthStepFamilyDescription": "Lege den Familiennamen und die Sprache fest.",
     "oauthVerificationNote": "Deine E-Mail wurde von {provider} verifiziert.",
-    "oauthSessionExpired": "OAuth-Sitzung abgelaufen. Bitte versuche es erneut."
+    "oauthSessionExpired": "OAuth-Sitzung abgelaufen. Bitte versuche es erneut.",
+    "continueToInvitation": "Weiter zur Einladung"
   },
   "createFamily": {
     "title": "Familie erstellen",
@@ -159,7 +160,11 @@
     "joining": "Beitreten...",
     "acceptAndJoin": "Annehmen & Beitreten",
     "joinAsProfile": "Du trittst bei als {name}",
-    "description": "{invitedBy} hat dich eingeladen, der Familie \"{familyName}\" beizutreten."
+    "description": "{invitedBy} hat dich eingeladen, der Familie \"{familyName}\" beizutreten.",
+    "loginRequired": "Du musst dich anmelden oder ein Konto erstellen, um diese Einladung anzunehmen.",
+    "loginToAccept": "Anmelden",
+    "createAccountToAccept": "Konto erstellen",
+    "emailWarning": "Diese Einladung wurde an {email} gesendet. Bitte verwende dieselbe E-Mail-Adresse beim Anmelden oder Erstellen deines Kontos, um Fehler zu vermeiden."
   },
   "invitationsPanel": {
     "title": "Einladungen",

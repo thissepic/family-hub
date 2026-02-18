@@ -14,7 +14,7 @@ import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 
-export function AccountLoginScreen() {
+export function AccountLoginScreen({ redirectTo }: { redirectTo?: string }) {
   const t = useTranslations("auth");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -41,10 +41,11 @@ export function AccountLoginScreen() {
     trpc.account.login.mutationOptions({
       onSuccess: (data) => {
         if (data.requiresTwoFactor && data.twoFactorToken) {
-          router.push(`/verify-2fa?token=${data.twoFactorToken}`);
+          const twoFaUrl = `/verify-2fa?token=${data.twoFactorToken}${redirectTo ? `&redirect=${encodeURIComponent(redirectTo)}` : ""}`;
+          router.push(twoFaUrl);
           return;
         }
-        router.push("/families");
+        router.push(redirectTo || "/families");
         router.refresh();
       },
       onError: (err) => {
@@ -80,7 +81,7 @@ export function AccountLoginScreen() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <OAuthButtons mode="login" />
+          <OAuthButtons mode="login" redirectTo={redirectTo} />
 
           {/* Divider */}
           <div className="relative">
@@ -160,7 +161,7 @@ export function AccountLoginScreen() {
 
             <p className="text-sm text-center text-muted-foreground mt-4">
               {t("noAccount")}{" "}
-              <Link href="/register" className="text-primary hover:underline">
+              <Link href={redirectTo ? `/register?redirect=${encodeURIComponent(redirectTo)}` : "/register"} className="text-primary hover:underline">
                 {t("createFamily")}
               </Link>
             </p>

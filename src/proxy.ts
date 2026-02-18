@@ -52,6 +52,11 @@ export async function proxy(request: NextRequest) {
   // Auth paths (login/register): redirect logged-in users away
   if (AUTH_PATHS.some((path) => pathname.startsWith(path))) {
     if (session?.userId) {
+      // If a valid redirect parameter is present, use it (e.g., /invite/token)
+      const redirectParam = request.nextUrl.searchParams.get("redirect");
+      if (redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//")) {
+        return NextResponse.redirect(redirectUrl(redirectParam, request));
+      }
       if (session.memberId) {
         return NextResponse.redirect(redirectUrl("/", request));
       }

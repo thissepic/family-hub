@@ -18,6 +18,7 @@ export interface OAuthUserInfo {
 export interface OAuthStateData {
   nonce: string;
   userId?: string; // present when linking from account settings
+  redirectTo?: string; // present when user needs to return to a page after auth (e.g., invite)
 }
 
 type ProcessResult =
