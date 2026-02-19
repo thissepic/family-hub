@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -8,6 +8,7 @@ import { useTRPC } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function ProfileSelectionScreen() {
@@ -19,8 +20,8 @@ export function ProfileSelectionScreen() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
 
-  // Fetch members for the current family (requires family-level session)
-  const { data: members = [] } = useQuery(trpc.members.list.queryOptions());
+  // Use the profile-selection endpoint (works at Layer 2)
+  const { data: members = [] } = useQuery(trpc.members.listForProfileSelection.queryOptions());
 
   // Fetch family info
   const { data: family } = useQuery(trpc.family.get.queryOptions());
@@ -59,7 +60,15 @@ export function ProfileSelectionScreen() {
     })
   );
 
-  const selectedMemberData = members.find((m: { id: string }) => m.id === selectedMember);
+  const selectedMemberData = members.find((m) => m.id === selectedMember);
+
+  // Auto-submit when selecting a profile that skips PIN
+  useEffect(() => {
+    if (selectedMember && selectedMemberData?.skipPin) {
+      selectProfileMutation.mutate({ memberId: selectedMember });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMember]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +79,17 @@ export function ProfileSelectionScreen() {
       pin: pin || undefined,
     });
   };
+
+  const getInitials = (name: string) =>
+    name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+
+  // Show PIN form only for profiles that need PIN
+  const showPinForm = selectedMember && selectedMemberData && !selectedMemberData.skipPin;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
@@ -84,30 +104,39 @@ export function ProfileSelectionScreen() {
           </p>
         </CardHeader>
         <CardContent>
-          {!selectedMember ? (
+          {!showPinForm ? (
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-3">
-                {members.map((member: { id: string; name: string; color: string; avatar: string | null }) => (
+                {members.map((member) => (
                   <button
                     key={member.id}
-                    onClick={() => setSelectedMember(member.id)}
-                    className="flex flex-col items-center gap-2 p-3 rounded-lg hover:bg-accent transition-colors"
+                    onClick={() => member.canSelect ? setSelectedMember(member.id) : undefined}
+                    disabled={!member.canSelect}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-lg transition-colors ${
+                      member.canSelect
+                        ? "hover:bg-accent cursor-pointer"
+                        : "opacity-40 cursor-not-allowed"
+                    }`}
                   >
                     <Avatar className="h-14 w-14">
                       <AvatarFallback
                         style={{ backgroundColor: member.color }}
                         className="text-white text-lg"
                       >
-                        {member.avatar ||
-                          member.name
-                            .split(" ")
-                            .map((n: string) => n[0])
-                            .join("")
-                            .toUpperCase()
-                            .slice(0, 2)}
+                        {member.avatar || getInitials(member.name)}
                       </AvatarFallback>
                     </Avatar>
                     <span className="text-sm font-medium">{member.name}</span>
+                    {member.isOwnProfile && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                        {t("you")}
+                      </Badge>
+                    )}
+                    {!member.isLinked && member.canSelect && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {t("unlinkedProfile")}
+                      </Badge>
+                    )}
                   </button>
                 ))}
               </div>
@@ -143,12 +172,7 @@ export function ProfileSelectionScreen() {
                     className="text-white text-xl"
                   >
                     {selectedMemberData?.avatar ||
-                      selectedMemberData?.name
-                        .split(" ")
-                        .map((n: string) => n[0])
-                        .join("")
-                        .toUpperCase()
-                        .slice(0, 2)}
+                      getInitials(selectedMemberData?.name || "")}
                   </AvatarFallback>
                 </Avatar>
                 <span className="font-medium">{selectedMemberData?.name}</span>

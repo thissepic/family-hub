@@ -1,6 +1,6 @@
 import { z } from "zod/v4";
 import { TRPCError } from "@trpc/server";
-import { router, protectedProcedure, adminProcedure, userProcedure } from "../init";
+import { router, protectedProcedure, adminProcedure, userProcedure, familyProcedure } from "../init";
 import { db } from "@/lib/db";
 import { checkPinRateLimit, resetPinRateLimit } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
@@ -22,6 +22,45 @@ export const membersRouter = router({
       },
       orderBy: { createdAt: "asc" },
     });
+  }),
+
+  /** List members for profile selection (Layer 2). Returns selection metadata. */
+  listForProfileSelection: familyProcedure.query(async ({ ctx }) => {
+    const ownMember = await db.familyMember.findUnique({
+      where: { familyId_userId: { familyId: ctx.session.familyId, userId: ctx.session.userId } },
+      select: { id: true, role: true },
+    });
+
+    const isAdmin = ownMember?.role === "ADMIN";
+
+    const members = await db.familyMember.findMany({
+      where: { familyId: ctx.session.familyId },
+      select: {
+        id: true,
+        name: true,
+        avatar: true,
+        color: true,
+        role: true,
+        userId: true,
+        pinHash: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      avatar: m.avatar,
+      color: m.color,
+      role: m.role,
+      isLinked: m.userId !== null,
+      isOwnProfile: m.userId === ctx.session.userId,
+      hasPin: !!m.pinHash,
+      canSelect: isAdmin
+        ? (m.userId === null || m.userId === ctx.session.userId)
+        : m.userId === ctx.session.userId,
+      skipPin: m.userId === ctx.session.userId || (isAdmin && m.userId === null),
+    }));
   }),
 
   update: protectedProcedure

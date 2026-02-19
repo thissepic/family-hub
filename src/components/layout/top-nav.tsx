@@ -31,6 +31,9 @@ export function TopNav({ onSearchOpen, memberName, memberColor, memberAvatar }: 
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
+  const { data: session } = useQuery(trpc.auth.getSession.queryOptions());
+  const isAdmin = session?.role === "ADMIN";
+
   const switchProfileMutation = useMutation(
     trpc.auth.switchProfile.mutationOptions({
       onSuccess: () => {
@@ -128,10 +131,12 @@ export function TopNav({ onSearchOpen, memberName, memberColor, memberAvatar }: 
             {t("accountSettings")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => switchProfileMutation.mutate()}>
-            <ArrowLeftRight className="mr-2 h-4 w-4" />
-            {tAuth("switchProfile")}
-          </DropdownMenuItem>
+          {isAdmin && (
+            <DropdownMenuItem onClick={() => switchProfileMutation.mutate()}>
+              <ArrowLeftRight className="mr-2 h-4 w-4" />
+              {tAuth("switchProfile")}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => switchFamilyMutation.mutate()}>
             <Home className="mr-2 h-4 w-4" />
             {tAuth("switchFamily")}

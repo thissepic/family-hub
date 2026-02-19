@@ -11,6 +11,7 @@ export interface SessionData {
   familyId?: string;
   memberId?: string;
   role?: "ADMIN" | "MEMBER";
+  originalMemberId?: string; // Set when admin impersonates an unlinked profile
   sessionToken?: string;
 }
 
@@ -37,6 +38,10 @@ export function isFamilySession(session: SessionData | null): session is FamilyS
 
 export function isFullSession(session: SessionData | null): session is FullSessionData {
   return !!session?.userId && !!session?.familyId && !!session?.memberId && !!session?.role;
+}
+
+export function isImpersonating(session: SessionData | null): boolean {
+  return !!session?.originalMemberId && session.originalMemberId !== session.memberId;
 }
 
 // ─── Configuration ──────────────────────────────────────────────────────────
@@ -174,7 +179,8 @@ export async function selectFamily(
 /** Upgrade a family session to a full session (after profile + PIN selection). */
 export async function upgradeSession(
   memberId: string,
-  role: "ADMIN" | "MEMBER"
+  role: "ADMIN" | "MEMBER",
+  originalMemberId?: string
 ): Promise<void> {
   const current = await getSession();
   if (!current?.userId || !current?.familyId) throw new Error("No family session to upgrade");
@@ -187,6 +193,7 @@ export async function upgradeSession(
     familyId: current.familyId,
     memberId,
     role,
+    ...(originalMemberId ? { originalMemberId } : {}),
     sessionToken,
   };
   const sealed = await sealData(data, { ...SESSION_OPTIONS, ttl });

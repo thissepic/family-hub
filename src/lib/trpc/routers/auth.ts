@@ -78,16 +78,37 @@ export const authRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Member not found" });
       }
 
-      // If the member is linked to this user, no PIN needed
       const isOwnProfile = member.userId === ctx.session.userId;
+      const isUnlinkedProfile = member.userId === null;
 
-      // Verify PIN if the member has one set and it's not the user's own linked profile
-      if (member.pinHash && !isOwnProfile) {
+      // Determine admin status from the user's own member record
+      const ownMember = isOwnProfile
+        ? member
+        : await db.familyMember.findUnique({
+            where: { familyId_userId: { familyId: ctx.session.familyId, userId: ctx.session.userId } },
+            select: { id: true, role: true },
+          });
+
+      const isAdmin = ownMember?.role === "ADMIN";
+
+      // Authorization: who can select which profile?
+      if (!isOwnProfile) {
+        if (!isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only select your own profile" });
+        }
+        if (!isUnlinkedProfile) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Cannot switch to a profile linked to another user" });
+        }
+      }
+
+      // PIN: skip for own profile or admin impersonating unlinked profile
+      const skipPin = isOwnProfile || (isAdmin && isUnlinkedProfile);
+
+      if (member.pinHash && !skipPin) {
         if (!input.pin) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "PIN required" });
         }
 
-        // Rate limit PIN attempts per member
         const pinRateLimitKey = `${ctx.session.familyId}:${input.memberId}`;
         try {
           await checkPinRateLimit(pinRateLimitKey);
@@ -103,12 +124,14 @@ export const authRouter = router({
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid PIN" });
         }
 
-        // Reset rate limit on success
         await resetPinRateLimit(pinRateLimitKey);
       }
 
-      // Upgrade family session to full session
-      await upgradeSession(member.id, member.role);
+      // Preserve admin role when impersonating; track original member ID
+      const effectiveRole = isOwnProfile ? member.role : "ADMIN";
+      const originalMemberId = isOwnProfile ? undefined : ownMember?.id;
+
+      await upgradeSession(member.id, effectiveRole, originalMemberId);
 
       // Set locale cookie
       const cookieStore = await cookies();
