@@ -21,9 +21,11 @@ import {
   DIFFICULTIES,
   DIFFICULTY_CONFIG,
   DEFAULT_CATEGORIES,
+  CHORE_CATEGORY_LABEL_KEYS,
   ROTATION_PATTERNS,
   ROTATION_LABEL_KEYS,
 } from "@/lib/chores/constants";
+import type { ChoreCategory } from "@/lib/chores/constants";
 import { RecurrencePicker } from "@/components/calendar/recurrence-picker";
 import type {
   ChoreDifficulty,
@@ -151,7 +153,7 @@ export function ChoreForm({
           <SelectContent>
             {DEFAULT_CATEGORIES.map((cat) => (
               <SelectItem key={cat} value={cat}>
-                {cat}
+                {t(CHORE_CATEGORY_LABEL_KEYS[cat])}
               </SelectItem>
             ))}
           </SelectContent>
@@ -272,7 +274,9 @@ export function ChoreForm({
         </div>
         {assigneeIds.length === 0 && (
           <p className="text-xs text-muted-foreground">
-            {t("selectAssignees")}
+            {rotationPattern === "ALL_TOGETHER"
+              ? t("selectAssigneesGroup")
+              : t("selectAssignees")}
           </p>
         )}
       </div>

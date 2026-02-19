@@ -37,8 +37,9 @@ import {
   SHOPPING_CATEGORIES,
   SHOPPING_UNITS,
   CATEGORY_LABEL_KEYS,
+  UNIT_LABEL_KEYS,
 } from "@/lib/shopping/constants";
-import type { ShoppingCategory } from "@/lib/shopping/constants";
+import type { ShoppingCategory, ShoppingUnit } from "@/lib/shopping/constants";
 
 interface ItemData {
   id: string;
@@ -163,7 +164,7 @@ export function ItemEditDialog({
                       <SelectItem value="__none__">{t("noUnit")}</SelectItem>
                       {SHOPPING_UNITS.map((u) => (
                         <SelectItem key={u} value={u}>
-                          {u}
+                          {t(UNIT_LABEL_KEYS[u])}
                         </SelectItem>
                       ))}
                     </SelectContent>

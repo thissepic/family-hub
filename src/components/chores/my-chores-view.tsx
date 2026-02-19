@@ -185,17 +185,25 @@ export function MyChoresView({
                 </div>
               </CardHeader>
               <CardContent className="space-y-2">
-                {group.instances.map((instance) => (
-                  <ChoreInstanceCard
-                    key={instance.id}
-                    instance={instance}
-                    isAdmin={isAdmin}
-                    currentMemberId={currentMemberId}
-                    assignedMemberId={group.memberId}
-                    onSwap={setSwapInstanceId}
-                    onEditChore={onEditChore}
-                  />
-                ))}
+                {group.instances.map((instance) => {
+                  // For group tasks, pass all instance assignee IDs;
+                  // otherwise, use the member group's ID
+                  const memberIds =
+                    instance.instanceAssignees && instance.instanceAssignees.length > 0
+                      ? instance.instanceAssignees.map((a: { member: { id: string } }) => a.member.id)
+                      : [group.memberId];
+                  return (
+                    <ChoreInstanceCard
+                      key={instance.id}
+                      instance={instance}
+                      isAdmin={isAdmin}
+                      currentMemberId={currentMemberId}
+                      assignedMemberIds={memberIds}
+                      onSwap={setSwapInstanceId}
+                      onEditChore={onEditChore}
+                    />
+                  );
+                })}
               </CardContent>
             </Card>
           );

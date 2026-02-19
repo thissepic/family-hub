@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useTranslations } from "next-intl";
+import { useState, useEffect, useMemo } from "react";
+import { useTranslations, useLocale } from "next-intl";
 import { RRule, type Weekday } from "rrule";
 import { format } from "date-fns";
 import {
@@ -37,14 +37,22 @@ const WEEKDAY_MAP: Record<number, Weekday> = {
   6: RRule.SU,
 };
 
-const DAY_LABELS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-
 export function RecurrencePicker({
   value,
   onChange,
   eventStartDate,
 }: RecurrencePickerProps) {
   const t = useTranslations("calendar");
+  const locale = useLocale();
+
+  const DAY_LABELS = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat(locale, { weekday: "short" });
+    // Jan 5, 2026 is a Monday
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(2026, 0, 5 + i);
+      return fmt.format(d).slice(0, 2);
+    });
+  }, [locale]);
 
   // Parse an RRULE string into its parts for custom mode initialization
   const parseRuleParts = (rule: string) => {

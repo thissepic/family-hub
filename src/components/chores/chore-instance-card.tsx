@@ -17,7 +17,8 @@ import {
   Undo2,
 } from "lucide-react";
 import { DifficultyBadge } from "./difficulty-badge";
-import { DIFFICULTY_CONFIG } from "@/lib/chores/constants";
+import { DIFFICULTY_CONFIG, CHORE_CATEGORY_LABEL_KEYS } from "@/lib/chores/constants";
+import type { ChoreCategory } from "@/lib/chores/constants";
 import { cn } from "@/lib/utils";
 import type { ChoreDifficulty, ChoreInstanceStatus } from "@prisma/client";
 
@@ -32,11 +33,17 @@ interface ChoreInstanceCardProps {
       difficulty: string;
       needsVerification: boolean;
       estimatedMinutes: number | null;
+      rotationPattern?: string;
     };
+    instanceAssignees?: Array<{
+      member: { id: string; name: string; color: string };
+    }>;
   };
   isAdmin: boolean;
   currentMemberId: string;
-  assignedMemberId: string;
+  /** @deprecated Use assignedMemberIds instead */
+  assignedMemberId?: string;
+  assignedMemberIds?: string[];
   onSwap: (instanceId: string) => void;
   onEditChore: (choreId: string) => void;
 }
@@ -54,6 +61,7 @@ export function ChoreInstanceCard({
   isAdmin,
   currentMemberId,
   assignedMemberId,
+  assignedMemberIds: assignedMemberIdsProp,
   onSwap,
   onEditChore,
 }: ChoreInstanceCardProps) {
@@ -64,7 +72,12 @@ export function ChoreInstanceCard({
   const status = instance.status as ChoreInstanceStatus;
   const config = DIFFICULTY_CONFIG[instance.chore.difficulty as ChoreDifficulty];
   const xp = config?.xp ?? 0;
-  const isAssignedToMe = assignedMemberId === currentMemberId;
+
+  // Support both old single prop and new array prop
+  const assignedMemberIds = assignedMemberIdsProp
+    ?? (assignedMemberId ? [assignedMemberId] : []);
+  const isAssignedToMe = assignedMemberIds.includes(currentMemberId);
+  const isGroupTask = instance.chore.rotationPattern === "ALL_TOGETHER";
   const isDone = status === "DONE";
   const isSkipped = status === "SKIPPED";
 
@@ -148,7 +161,7 @@ export function ChoreInstanceCard({
               {instance.chore.title}
             </p>
             <Badge variant="outline" className="text-[10px] shrink-0">
-              {instance.chore.category}
+              {t(CHORE_CATEGORY_LABEL_KEYS[instance.chore.category as ChoreCategory] ?? instance.chore.category)}
             </Badge>
           </div>
         </div>
@@ -161,6 +174,24 @@ export function ChoreInstanceCard({
           <Pencil className="h-3.5 w-3.5" />
         </Button>
       </div>
+
+      {/* Group task assignee dots */}
+      {isGroupTask && instance.instanceAssignees && instance.instanceAssignees.length > 0 && (
+        <div className="flex items-center gap-1.5 pl-5">
+          <div className="flex -space-x-1">
+            {instance.instanceAssignees.map((a) => (
+              <span
+                key={a.member.id}
+                className="h-5 w-5 rounded-full border-2 border-background flex items-center justify-center text-[9px] font-medium text-white"
+                style={{ backgroundColor: a.member.color }}
+                title={a.member.name}
+              >
+                {a.member.name.charAt(0)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Row 2: Meta info */}
       <div className="flex items-center gap-3 text-xs text-muted-foreground pl-5">
@@ -201,15 +232,17 @@ export function ChoreInstanceCard({
                 <Check className="mr-1 h-3 w-3" />
                 {t("markComplete")}
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => onSwap(instance.id)}
-                title={t("swapRequest")}
-              >
-                <ArrowLeftRight className="h-3.5 w-3.5" />
-              </Button>
+              {!isGroupTask && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => onSwap(instance.id)}
+                  title={t("swapRequest")}
+                >
+                  <ArrowLeftRight className="h-3.5 w-3.5" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"

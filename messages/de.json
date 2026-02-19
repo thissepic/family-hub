@@ -687,9 +687,11 @@
     "rotationRoundRobin": "Reihum",
     "rotationRandom": "Zufällig",
     "rotationWeighted": "Gewichtet (wenigste zuerst)",
+    "rotationAllTogether": "Alle gemeinsam (Gruppenaufgabe)",
     "needsVerification": "Admin-Bestätigung erforderlich",
     "assignees": "Zugewiesene Mitglieder",
     "selectAssignees": "Mitglieder für Rotation auswählen",
+    "selectAssigneesGroup": "Mitglieder auswählen, die dies gemeinsam erledigen",
 
     "frequencyDaily": "Täglich",
     "frequencyWeekly": "Wöchentlich",
@@ -757,7 +759,16 @@
     "setSaved": "Pflichtgruppe gespeichert",
     "setDeleted": "Pflichtgruppe gelöscht",
     "addToSet": "Zur Gruppe hinzufügen",
-    "removeFromSet": "Aus Gruppe entfernen"
+    "removeFromSet": "Aus Gruppe entfernen",
+
+    "categoryGeneral": "Allgemein",
+    "categoryKitchen": "Küche",
+    "categoryBathroom": "Badezimmer",
+    "categoryBedroom": "Schlafzimmer",
+    "categoryLivingRoom": "Wohnzimmer",
+    "categoryOutdoor": "Draußen",
+    "categoryLaundry": "Wäsche",
+    "categoryPets": "Haustiere"
   },
   "shopping": {
     "title": "Einkaufslisten",
@@ -824,7 +835,22 @@
     "recurringHint": "Artikel erscheint nach dem Löschen erneut",
 
     "allMembers": "Alle Mitglieder",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+
+    "unitPcs": "Stk.",
+    "unitKg": "kg",
+    "unitG": "g",
+    "unitLb": "lb",
+    "unitOz": "oz",
+    "unitL": "L",
+    "unitMl": "ml",
+    "unitPack": "Packung",
+    "unitBottle": "Flasche",
+    "unitCan": "Dose",
+    "unitBag": "Beutel",
+    "unitBox": "Karton",
+    "unitBunch": "Bund",
+    "unitDozen": "Dutzend"
   },
   "meals": {
     "title": "Mahlzeiten",

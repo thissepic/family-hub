@@ -48,6 +48,7 @@ const instanceInclude = {
       recurrenceRule: true,
       needsVerification: true,
       estimatedMinutes: true,
+      rotationPattern: true,
       assignees: {
         include: {
           member: { select: { id: true, name: true, color: true } },
@@ -58,6 +59,11 @@ const instanceInclude = {
   },
   assignedMember: {
     select: { id: true, name: true, color: true },
+  },
+  instanceAssignees: {
+    include: {
+      member: { select: { id: true, name: true, color: true } },
+    },
   },
 } as const;
 
@@ -269,7 +275,11 @@ export const choresRouter = router({
       };
 
       if (input.memberIds && input.memberIds.length > 0) {
-        where.assignedMemberId = { in: input.memberIds };
+        // Include both single-assignee and group-task instances
+        where.OR = [
+          { assignedMemberId: { in: input.memberIds } },
+          { instanceAssignees: { some: { memberId: { in: input.memberIds } } } },
+        ];
       }
 
       if (input.statuses && input.statuses.length > 0) {
@@ -294,16 +304,31 @@ export const choresRouter = router({
       >();
 
       for (const inst of instances) {
-        const key = inst.assignedMember.id;
-        if (!memberMap.has(key)) {
-          memberMap.set(key, {
-            memberId: inst.assignedMember.id,
-            memberName: inst.assignedMember.name,
-            memberColor: inst.assignedMember.color,
-            instances: [],
-          });
+        // Determine which members this instance belongs to
+        const assignedMembers =
+          inst.instanceAssignees.length > 0
+            ? inst.instanceAssignees.map((a) => a.member)
+            : inst.assignedMember
+              ? [inst.assignedMember]
+              : [];
+
+        for (const member of assignedMembers) {
+          // If filtering by memberIds, only include relevant members
+          if (input.memberIds && input.memberIds.length > 0 && !input.memberIds.includes(member.id)) {
+            continue;
+          }
+
+          const key = member.id;
+          if (!memberMap.has(key)) {
+            memberMap.set(key, {
+              memberId: member.id,
+              memberName: member.name,
+              memberColor: member.color,
+              instances: [],
+            });
+          }
+          memberMap.get(key)!.instances.push(inst);
         }
-        memberMap.get(key)!.instances.push(inst);
       }
 
       return Array.from(memberMap.values());
@@ -324,8 +349,10 @@ export const choresRouter = router({
               difficulty: true,
               needsVerification: true,
               familyId: true,
+              rotationPattern: true,
             },
           },
+          instanceAssignees: { select: { memberId: true } },
         },
       });
 
@@ -333,10 +360,11 @@ export const choresRouter = router({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      if (
-        instance.assignedMemberId !== memberId &&
-        ctx.session.role !== "ADMIN"
-      ) {
+      // Permission check: assigned member or instance assignee or admin
+      const isAssigned =
+        instance.assignedMemberId === memberId ||
+        instance.instanceAssignees.some((a) => a.memberId === memberId);
+      if (!isAssigned && ctx.session.role !== "ADMIN") {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -348,6 +376,7 @@ export const choresRouter = router({
       }
 
       const difficulty = instance.chore.difficulty as ChoreDifficulty;
+      const isGroupTask = instance.chore.rotationPattern === "ALL_TOGETHER";
 
       // Get XP from settings or fall back to constants
       const xpSettings = await db.xpSettings.findUnique({ where: { familyId } });
@@ -371,28 +400,41 @@ export const choresRouter = router({
           data: { status: "DONE", completedAt: new Date() },
         });
 
-        // Award XP via engine (handles points, streaks, profile, achievements, notifications)
-        const xpResult = await awardXp(tx, {
-          memberId: instance.assignedMemberId,
-          familyId,
-          xpAmount: xp,
-          source: "CHORE_COMPLETION",
-          sourceId: instance.id,
-          description: `Completed chore: ${instance.chore.title}`,
-        });
+        // Determine who gets XP
+        const xpRecipients = isGroupTask
+          ? instance.instanceAssignees.map((a) => a.memberId)
+          : instance.assignedMemberId
+            ? [instance.assignedMemberId]
+            : [];
 
-        await tx.activityEvent.create({
-          data: {
+        let anyLeveledUp = false;
+        let allPendingPush: Awaited<ReturnType<typeof awardXp>>["pendingPush"] = [];
+
+        for (const recipientId of xpRecipients) {
+          const xpResult = await awardXp(tx, {
+            memberId: recipientId,
             familyId,
-            memberId: instance.assignedMemberId,
-            type: "CHORE_COMPLETED",
-            description: `Completed chore: ${instance.chore.title}`,
-            sourceModule: "chores",
+            xpAmount: xp,
+            source: "CHORE_COMPLETION",
             sourceId: instance.id,
-          },
-        });
+            description: `Completed chore: ${instance.chore.title}`,
+          });
+          if (xpResult.leveledUp) anyLeveledUp = true;
+          allPendingPush = [...allPendingPush, ...xpResult.pendingPush];
 
-        return { status: "DONE" as const, xpAwarded: xpResult.xpAwarded, leveledUp: xpResult.leveledUp, pendingPush: xpResult.pendingPush };
+          await tx.activityEvent.create({
+            data: {
+              familyId,
+              memberId: recipientId,
+              type: "CHORE_COMPLETED",
+              description: `Completed chore: ${instance.chore.title}`,
+              sourceModule: "chores",
+              sourceId: instance.id,
+            },
+          });
+        }
+
+        return { status: "DONE" as const, xpAwarded: xp, leveledUp: anyLeveledUp, pendingPush: allPendingPush };
       });
 
       // Send push notifications after transaction commits
@@ -415,8 +457,10 @@ export const choresRouter = router({
               title: true,
               difficulty: true,
               familyId: true,
+              rotationPattern: true,
             },
           },
+          instanceAssignees: { select: { memberId: true } },
         },
       });
 
@@ -442,6 +486,7 @@ export const choresRouter = router({
 
       // Approve — complete with XP
       const difficulty = instance.chore.difficulty as ChoreDifficulty;
+      const isGroupTask = instance.chore.rotationPattern === "ALL_TOGETHER";
       const xpSettings = await db.xpSettings.findUnique({ where: { familyId } });
       const choreXpValues = (xpSettings?.choreXpValues ?? {}) as Record<string, number>;
       const xp = choreXpValues[difficulty] ?? DIFFICULTY_CONFIG[difficulty]?.xp ?? 0;
@@ -456,28 +501,41 @@ export const choresRouter = router({
           },
         });
 
-        // Award XP via engine
-        const xpResult = await awardXp(tx, {
-          memberId: instance.assignedMemberId,
-          familyId,
-          xpAmount: xp,
-          source: "CHORE_COMPLETION",
-          sourceId: instance.id,
-          description: `Completed chore: ${instance.chore.title}`,
-        });
+        // Determine who gets XP
+        const xpRecipients = isGroupTask
+          ? instance.instanceAssignees.map((a) => a.memberId)
+          : instance.assignedMemberId
+            ? [instance.assignedMemberId]
+            : [];
 
-        await tx.activityEvent.create({
-          data: {
+        let anyLeveledUp = false;
+        let allPendingPush: Awaited<ReturnType<typeof awardXp>>["pendingPush"] = [];
+
+        for (const recipientId of xpRecipients) {
+          const xpResult = await awardXp(tx, {
+            memberId: recipientId,
             familyId,
-            memberId: instance.assignedMemberId,
-            type: "CHORE_COMPLETED",
-            description: `Completed chore: ${instance.chore.title}`,
-            sourceModule: "chores",
+            xpAmount: xp,
+            source: "CHORE_COMPLETION",
             sourceId: instance.id,
-          },
-        });
+            description: `Completed chore: ${instance.chore.title}`,
+          });
+          if (xpResult.leveledUp) anyLeveledUp = true;
+          allPendingPush = [...allPendingPush, ...xpResult.pendingPush];
 
-        return { status: "DONE" as const, xpAwarded: xpResult.xpAwarded, leveledUp: xpResult.leveledUp, pendingPush: xpResult.pendingPush };
+          await tx.activityEvent.create({
+            data: {
+              familyId,
+              memberId: recipientId,
+              type: "CHORE_COMPLETED",
+              description: `Completed chore: ${instance.chore.title}`,
+              sourceModule: "chores",
+              sourceId: instance.id,
+            },
+          });
+        }
+
+        return { status: "DONE" as const, xpAwarded: xp, leveledUp: anyLeveledUp, pendingPush: allPendingPush };
       });
 
       flushPendingPush(result.pendingPush).catch(() => {});
@@ -488,13 +546,26 @@ export const choresRouter = router({
   skipInstance: protectedProcedure
     .input(skipInstanceInput)
     .mutation(async ({ ctx, input }) => {
+      const { memberId } = ctx.session;
+
       const instance = await db.choreInstance.findUnique({
         where: { id: input.instanceId },
-        include: { chore: { select: { familyId: true } } },
+        include: {
+          chore: { select: { familyId: true } },
+          instanceAssignees: { select: { memberId: true } },
+        },
       });
 
       if (!instance || instance.chore.familyId !== ctx.session.familyId) {
         throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      // Permission: assigned member, instance assignee, or admin
+      const isAssigned =
+        instance.assignedMemberId === memberId ||
+        instance.instanceAssignees.some((a) => a.memberId === memberId);
+      if (!isAssigned && ctx.session.role !== "ADMIN") {
+        throw new TRPCError({ code: "FORBIDDEN" });
       }
 
       if (instance.status !== "PENDING") {
@@ -525,8 +596,10 @@ export const choresRouter = router({
               id: true,
               title: true,
               familyId: true,
+              rotationPattern: true,
             },
           },
+          instanceAssignees: { select: { memberId: true } },
         },
       });
 
@@ -534,10 +607,11 @@ export const choresRouter = router({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      if (
-        instance.assignedMemberId !== memberId &&
-        ctx.session.role !== "ADMIN"
-      ) {
+      // Permission: assigned member, instance assignee, or admin
+      const isAssigned =
+        instance.assignedMemberId === memberId ||
+        instance.instanceAssignees.some((a) => a.memberId === memberId);
+      if (!isAssigned && ctx.session.role !== "ADMIN") {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -548,14 +622,27 @@ export const choresRouter = router({
         });
       }
 
+      const isGroupTask = instance.chore.rotationPattern === "ALL_TOGETHER";
+
       await db.$transaction(async (tx) => {
         // If it was DONE, XP was already awarded — remove it
         if (instance.status === "DONE") {
-          await removeXp(tx, {
-            memberId: instance.assignedMemberId,
-            source: "CHORE_COMPLETION",
-            sourceId: instance.id,
-          });
+          if (isGroupTask) {
+            // Remove XP from all assignees
+            for (const assignee of instance.instanceAssignees) {
+              await removeXp(tx, {
+                memberId: assignee.memberId,
+                source: "CHORE_COMPLETION",
+                sourceId: instance.id,
+              });
+            }
+          } else if (instance.assignedMemberId) {
+            await removeXp(tx, {
+              memberId: instance.assignedMemberId,
+              source: "CHORE_COMPLETION",
+              sourceId: instance.id,
+            });
+          }
         }
 
         // Reset instance back to PENDING
@@ -586,6 +673,7 @@ export const choresRouter = router({
           chore: {
             select: {
               familyId: true,
+              rotationPattern: true,
               assignees: { select: { memberId: true } },
             },
           },
@@ -594,6 +682,14 @@ export const choresRouter = router({
 
       if (!instance || instance.chore.familyId !== familyId) {
         throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      // Swaps not allowed for group tasks
+      if (instance.chore.rotationPattern === "ALL_TOGETHER") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Swaps are not available for group tasks",
+        });
       }
 
       if (instance.assignedMemberId !== memberId) {
@@ -850,6 +946,11 @@ export const choresRouter = router({
           assignedMember: {
             select: { id: true, name: true, color: true },
           },
+          instanceAssignees: {
+            include: {
+              member: { select: { id: true, name: true, color: true } },
+            },
+          },
         },
       });
 
@@ -866,20 +967,32 @@ export const choresRouter = router({
       >();
 
       for (const inst of instances) {
-        const key = inst.assignedMember.id;
-        if (!statsMap.has(key)) {
-          statsMap.set(key, {
-            memberId: inst.assignedMember.id,
-            memberName: inst.assignedMember.name,
-            memberColor: inst.assignedMember.color,
-            completions: 0,
-            totalXp: 0,
-          });
-        }
-        const stat = statsMap.get(key)!;
-        stat.completions += 1;
         const difficulty = inst.chore.difficulty as ChoreDifficulty;
-        stat.totalXp += DIFFICULTY_CONFIG[difficulty]?.xp ?? 0;
+        const xpPerMember = DIFFICULTY_CONFIG[difficulty]?.xp ?? 0;
+
+        // Determine contributing members
+        const members =
+          inst.instanceAssignees.length > 0
+            ? inst.instanceAssignees.map((a) => a.member)
+            : inst.assignedMember
+              ? [inst.assignedMember]
+              : [];
+
+        for (const member of members) {
+          const key = member.id;
+          if (!statsMap.has(key)) {
+            statsMap.set(key, {
+              memberId: member.id,
+              memberName: member.name,
+              memberColor: member.color,
+              completions: 0,
+              totalXp: 0,
+            });
+          }
+          const stat = statsMap.get(key)!;
+          stat.completions += 1;
+          stat.totalXp += xpPerMember;
+        }
       }
 
       const weeks = Math.max(1, input.days / 7);

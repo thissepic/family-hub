@@ -57,3 +57,21 @@ export const SHOPPING_UNITS = [
 ] as const;
 
 export type ShoppingUnit = (typeof SHOPPING_UNITS)[number];
+
+// i18n label keys for units
+export const UNIT_LABEL_KEYS: Record<ShoppingUnit, string> = {
+  pcs: "unitPcs",
+  kg: "unitKg",
+  g: "unitG",
+  lb: "unitLb",
+  oz: "unitOz",
+  L: "unitL",
+  ml: "unitMl",
+  pack: "unitPack",
+  bottle: "unitBottle",
+  can: "unitCan",
+  bag: "unitBag",
+  box: "unitBox",
+  bunch: "unitBunch",
+  dozen: "unitDozen",
+};

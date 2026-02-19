@@ -687,9 +687,11 @@
     "rotationRoundRobin": "Round Robin",
     "rotationRandom": "Random",
     "rotationWeighted": "Weighted (fewest first)",
+    "rotationAllTogether": "All Together (group task)",
     "needsVerification": "Requires Admin Verification",
     "assignees": "Assigned Members",
     "selectAssignees": "Select members for rotation",
+    "selectAssigneesGroup": "Select members who will do this together",
 
     "frequencyDaily": "Daily",
     "frequencyWeekly": "Weekly",
@@ -757,7 +759,16 @@
     "setSaved": "Chore set saved",
     "setDeleted": "Chore set deleted",
     "addToSet": "Add to Set",
-    "removeFromSet": "Remove from Set"
+    "removeFromSet": "Remove from Set",
+
+    "categoryGeneral": "General",
+    "categoryKitchen": "Kitchen",
+    "categoryBathroom": "Bathroom",
+    "categoryBedroom": "Bedroom",
+    "categoryLivingRoom": "Living Room",
+    "categoryOutdoor": "Outdoor",
+    "categoryLaundry": "Laundry",
+    "categoryPets": "Pets"
   },
   "shopping": {
     "title": "Shopping",
@@ -824,7 +835,22 @@
     "recurringHint": "Item reappears when cleared",
 
     "allMembers": "All Members",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+
+    "unitPcs": "pcs",
+    "unitKg": "kg",
+    "unitG": "g",
+    "unitLb": "lb",
+    "unitOz": "oz",
+    "unitL": "L",
+    "unitMl": "ml",
+    "unitPack": "pack",
+    "unitBottle": "bottle",
+    "unitCan": "can",
+    "unitBag": "bag",
+    "unitBox": "box",
+    "unitBunch": "bunch",
+    "unitDozen": "dozen"
   },
   "meals": {
     "title": "Meals",

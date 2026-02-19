@@ -1,7 +1,7 @@
 import { z } from "zod/v4";
 
 const choreDifficulty = z.enum(["EASY", "MEDIUM", "HARD"]);
-const rotationPattern = z.enum(["ROUND_ROBIN", "RANDOM", "WEIGHTED"]);
+const rotationPattern = z.enum(["ROUND_ROBIN", "RANDOM", "WEIGHTED", "ALL_TOGETHER"]);
 const choreInstanceStatus = z.enum([
   "PENDING",
   "DONE",

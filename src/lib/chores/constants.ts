@@ -27,16 +27,31 @@ export const DEFAULT_CATEGORIES = [
   "Pets",
 ] as const;
 
+export type ChoreCategory = (typeof DEFAULT_CATEGORIES)[number];
+
+export const CHORE_CATEGORY_LABEL_KEYS: Record<ChoreCategory, string> = {
+  General: "categoryGeneral",
+  Kitchen: "categoryKitchen",
+  Bathroom: "categoryBathroom",
+  Bedroom: "categoryBedroom",
+  "Living Room": "categoryLivingRoom",
+  Outdoor: "categoryOutdoor",
+  Laundry: "categoryLaundry",
+  Pets: "categoryPets",
+};
+
 // ─── Rotation ────────────────────────────────────────────────────
 
 export const ROTATION_PATTERNS = [
   "ROUND_ROBIN",
   "RANDOM",
   "WEIGHTED",
+  "ALL_TOGETHER",
 ] as const;
 
 export const ROTATION_LABEL_KEYS: Record<string, string> = {
   ROUND_ROBIN: "rotationRoundRobin",
   RANDOM: "rotationRandom",
   WEIGHTED: "rotationWeighted",
+  ALL_TOGETHER: "rotationAllTogether",
 };

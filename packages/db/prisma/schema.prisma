@@ -74,6 +74,7 @@ enum RotationPattern {
   ROUND_ROBIN
   RANDOM
   WEIGHTED
+  ALL_TOGETHER
 }
 
 enum ChoreInstanceStatus {
@@ -273,6 +274,7 @@ model FamilyMember {
   createdChores              Chore[]                  @relation("ChoreCreatedBy")
   choreAssignments           ChoreAssignee[]
   assignedChoreInstances     ChoreInstance[]          @relation("ChoreAssignedTo")
+  choreInstanceAssignments   ChoreInstanceAssignee[]
   verifiedChoreInstances     ChoreInstance[]          @relation("ChoreVerifiedBy")
   sentSwapRequests           ChoreSwapRequest[]       @relation("SwapRequester")
   receivedSwapRequests       ChoreSwapRequest[]       @relation("SwapTarget")
@@ -465,7 +467,7 @@ model ChoreAssignee {
 model ChoreInstance {
   id               String              @id @default(cuid())
   choreId          String
-  assignedMemberId String
+  assignedMemberId String?
   periodStart      DateTime            @db.Date
   periodEnd        DateTime            @db.Date
   status           ChoreInstanceStatus @default(PENDING)
@@ -473,15 +475,29 @@ model ChoreInstance {
   verifiedById     String?
   verifiedAt       DateTime?
 
-  chore          Chore              @relation(fields: [choreId], references: [id], onDelete: Cascade)
-  assignedMember FamilyMember       @relation("ChoreAssignedTo", fields: [assignedMemberId], references: [id], onDelete: Cascade)
-  verifiedBy     FamilyMember?      @relation("ChoreVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
-  swapRequests   ChoreSwapRequest[]
+  chore              Chore                   @relation(fields: [choreId], references: [id], onDelete: Cascade)
+  assignedMember     FamilyMember?           @relation("ChoreAssignedTo", fields: [assignedMemberId], references: [id], onDelete: Cascade)
+  verifiedBy         FamilyMember?           @relation("ChoreVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  swapRequests       ChoreSwapRequest[]
+  instanceAssignees  ChoreInstanceAssignee[]
 
   @@index([choreId])
   @@index([assignedMemberId])
   @@index([periodStart])
   @@index([periodStart, periodEnd])
+}
+
+model ChoreInstanceAssignee {
+  id              String @id @default(cuid())
+  choreInstanceId String
+  memberId        String
+
+  choreInstance ChoreInstance @relation(fields: [choreInstanceId], references: [id], onDelete: Cascade)
+  member        FamilyMember  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([choreInstanceId, memberId])
+  @@index([choreInstanceId])
+  @@index([memberId])
 }
 
 model ChoreSwapRequest {

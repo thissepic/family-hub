@@ -6,7 +6,7 @@ interface Assignee {
 }
 
 interface PastInstance {
-  assignedMemberId: string;
+  assignedMemberId: string | null;
 }
 
 /**
@@ -75,10 +75,12 @@ export function pickNextAssignee(
 
   switch (pattern) {
     case "ROUND_ROBIN": {
-      if (pastInstances.length === 0) {
+      // Filter out group-task instances (null assignee) for rotation context
+      const rotationHistory = pastInstances.filter((i) => i.assignedMemberId != null);
+      if (rotationHistory.length === 0) {
         return sorted[0].memberId;
       }
-      const lastAssigned = pastInstances[0].assignedMemberId;
+      const lastAssigned = rotationHistory[0].assignedMemberId!;
       const lastIndex = sorted.findIndex((a) => a.memberId === lastAssigned);
       if (lastIndex === -1) {
         // Last assignee no longer in pool
@@ -102,6 +104,7 @@ export function pickNextAssignee(
         counts.set(a.memberId, 0);
       }
       for (const inst of pastInstances) {
+        if (inst.assignedMemberId == null) continue; // skip group-task instances
         const current = counts.get(inst.assignedMemberId);
         if (current !== undefined) {
           counts.set(inst.assignedMemberId, current + 1);
@@ -119,6 +122,12 @@ export function pickNextAssignee(
         }
       }
       // Fallback
+      return sorted[0].memberId;
+    }
+
+    case "ALL_TOGETHER": {
+      // Group tasks bypass rotation — this should not be called for ALL_TOGETHER.
+      // Return first member as fallback.
       return sorted[0].memberId;
     }
   }

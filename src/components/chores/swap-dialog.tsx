@@ -47,7 +47,7 @@ export function SwapDialog({ instanceId, onOpenChange }: SwapDialogProps) {
 
   const otherAssignees =
     instance?.chore.assignees.filter(
-      (a) => a.member.id !== instance.assignedMember.id
+      (a) => a.member.id !== instance.assignedMember?.id
     ) ?? [];
 
   return (

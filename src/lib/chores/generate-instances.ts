@@ -56,21 +56,52 @@ export async function ensureInstancesForChore(
   });
 
   if (!existingCurrent) {
-    const memberId = pickNextAssignee(
-      chore.rotationPattern as RotationPattern,
-      chore.assignees,
-      chore.instances,
-      currentPeriod.start
-    );
-    const instance = await tx.choreInstance.create({
-      data: {
-        choreId,
-        assignedMemberId: memberId,
-        periodStart: currentPeriod.start,
-        periodEnd: currentPeriod.end,
-      },
-    });
-    createdIds.push(instance.id);
+    const isGroupTask = chore.rotationPattern === "ALL_TOGETHER";
+
+    if (isGroupTask) {
+      // Group task: assign ALL members from the pool
+      const instance = await tx.choreInstance.create({
+        data: {
+          choreId,
+          assignedMemberId: null,
+          periodStart: currentPeriod.start,
+          periodEnd: currentPeriod.end,
+        },
+      });
+      for (const assignee of chore.assignees) {
+        await tx.choreInstanceAssignee.create({
+          data: {
+            choreInstanceId: instance.id,
+            memberId: assignee.memberId,
+          },
+        });
+      }
+      createdIds.push(instance.id);
+    } else {
+      // Rotation: pick one member
+      const memberId = pickNextAssignee(
+        chore.rotationPattern as RotationPattern,
+        chore.assignees,
+        chore.instances,
+        currentPeriod.start
+      );
+      const instance = await tx.choreInstance.create({
+        data: {
+          choreId,
+          assignedMemberId: memberId,
+          periodStart: currentPeriod.start,
+          periodEnd: currentPeriod.end,
+        },
+      });
+      // Also create a single instance assignee for consistency
+      await tx.choreInstanceAssignee.create({
+        data: {
+          choreInstanceId: instance.id,
+          memberId,
+        },
+      });
+      createdIds.push(instance.id);
+    }
   }
 
   // Optionally generate for next period
@@ -88,29 +119,57 @@ export async function ensureInstancesForChore(
       });
 
       if (!existingNext) {
-        // Re-fetch instances including any we just created
-        const updatedInstances = await tx.choreInstance.findMany({
-          where: { choreId },
-          orderBy: { periodStart: "desc" },
-          take: 10,
-          select: { assignedMemberId: true, periodStart: true },
-        });
+        const isGroupTask = chore.rotationPattern === "ALL_TOGETHER";
 
-        const memberId = pickNextAssignee(
-          chore.rotationPattern as RotationPattern,
-          chore.assignees,
-          updatedInstances,
-          nextPeriod.start
-        );
-        const instance = await tx.choreInstance.create({
-          data: {
-            choreId,
-            assignedMemberId: memberId,
-            periodStart: nextPeriod.start,
-            periodEnd: nextPeriod.end,
-          },
-        });
-        createdIds.push(instance.id);
+        if (isGroupTask) {
+          const instance = await tx.choreInstance.create({
+            data: {
+              choreId,
+              assignedMemberId: null,
+              periodStart: nextPeriod.start,
+              periodEnd: nextPeriod.end,
+            },
+          });
+          for (const assignee of chore.assignees) {
+            await tx.choreInstanceAssignee.create({
+              data: {
+                choreInstanceId: instance.id,
+                memberId: assignee.memberId,
+              },
+            });
+          }
+          createdIds.push(instance.id);
+        } else {
+          // Re-fetch instances including any we just created
+          const updatedInstances = await tx.choreInstance.findMany({
+            where: { choreId },
+            orderBy: { periodStart: "desc" },
+            take: 10,
+            select: { assignedMemberId: true, periodStart: true },
+          });
+
+          const memberId = pickNextAssignee(
+            chore.rotationPattern as RotationPattern,
+            chore.assignees,
+            updatedInstances,
+            nextPeriod.start
+          );
+          const instance = await tx.choreInstance.create({
+            data: {
+              choreId,
+              assignedMemberId: memberId,
+              periodStart: nextPeriod.start,
+              periodEnd: nextPeriod.end,
+            },
+          });
+          await tx.choreInstanceAssignee.create({
+            data: {
+              choreInstanceId: instance.id,
+              memberId,
+            },
+          });
+          createdIds.push(instance.id);
+        }
       }
     }
   }

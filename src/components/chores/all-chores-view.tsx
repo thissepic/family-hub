@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { DifficultyBadge } from "./difficulty-badge";
 import { ChoreSetCard } from "./chore-set-card";
 import { ChoreSetDialog } from "./chore-set-dialog";
-import { ROTATION_LABEL_KEYS } from "@/lib/chores/constants";
+import { ROTATION_LABEL_KEYS, CHORE_CATEGORY_LABEL_KEYS } from "@/lib/chores/constants";
+import type { ChoreCategory } from "@/lib/chores/constants";
 import { describeRecurrence } from "@/lib/chores/describe-recurrence";
 
 interface AllChoresViewProps {
@@ -125,7 +126,7 @@ export function AllChoresView({
 
           {/* Category */}
           <Badge variant="outline" className="text-[10px] shrink-0">
-            {chore.category}
+            {t(CHORE_CATEGORY_LABEL_KEYS[chore.category as ChoreCategory] ?? chore.category)}
           </Badge>
 
           {/* Difficulty */}

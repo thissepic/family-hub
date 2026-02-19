@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useState, useMemo } from "react";
+import { useTranslations, useLocale } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/lib/trpc/client";
 import { ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
@@ -22,10 +22,9 @@ import {
 } from "@/lib/meals/constants";
 import type { MealSlot } from "@prisma/client";
 
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
 export function WeekPlanView() {
   const t = useTranslations("meals");
+  const locale = useLocale();
   const trpc = useTRPC();
 
   const [currentMonday, setCurrentMonday] = useState(() =>
@@ -52,6 +51,11 @@ export function WeekPlanView() {
       mealLookup.get(dateStr)!.set(meal.slot, meal);
     }
   }
+
+  const dayFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale, { weekday: "short" }),
+    [locale]
+  );
 
   const goToday = () => setCurrentMonday(getMonday(new Date()));
   const goPrev = () => setCurrentMonday((m) => addWeeks(m, -1));
@@ -105,7 +109,7 @@ export function WeekPlanView() {
                   isToday ? "text-primary" : "text-muted-foreground"
                 }`}
               >
-                <div>{DAY_LABELS[i]}</div>
+                <div>{dayFormatter.format(day).slice(0, 2)}</div>
                 <div className="text-[10px]">{day.getDate()}</div>
               </div>
             );
@@ -173,7 +177,7 @@ export function WeekPlanView() {
                   isToday ? "text-primary" : ""
                 }`}
               >
-                {DAY_LABELS[i]} {day.getDate()}
+                {dayFormatter.format(day).slice(0, 2)} {day.getDate()}
               </h3>
               <div className="grid grid-cols-2 gap-1.5">
                 {MEAL_SLOTS.map((slot) => {
