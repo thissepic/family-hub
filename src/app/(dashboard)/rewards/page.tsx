@@ -58,7 +58,7 @@ export default function RewardsPage() {
       <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
 
       <Tabs defaultValue={defaultTab}>
-        <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
+        <TabsList className="flex flex-wrap w-full !h-auto justify-start gap-1">
           <TabsTrigger value="progress">{t("tabProgress")}</TabsTrigger>
           <TabsTrigger value="achievements">{t("tabAchievements")}</TabsTrigger>
           <TabsTrigger value="shop">{t("tabShop")}</TabsTrigger>

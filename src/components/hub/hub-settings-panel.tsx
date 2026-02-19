@@ -184,7 +184,7 @@ export function HubSettingsPanel({ compact }: HubSettingsPanelProps) {
           </p>
 
           {hubUrl ? (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Input
                 value={hubUrl}
                 readOnly
@@ -207,7 +207,7 @@ export function HubSettingsPanel({ compact }: HubSettingsPanelProps) {
             </p>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"

@@ -227,7 +227,7 @@ export function RecipeDialog({
               </div>
 
               {/* Servings / Prep / Cook */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="servings">{t("servings")}</Label>
                   <Input
@@ -283,14 +283,14 @@ export function RecipeDialog({
                 <Label>{t("ingredients")}</Label>
                 <div className="space-y-2">
                   {ingredients.map((ing, i) => (
-                    <div key={i} className="flex items-center gap-2">
+                    <div key={i} className="flex flex-wrap items-center gap-2">
                       <Input
                         value={ing.name}
                         onChange={(e) =>
                           updateIngredient(i, "name", e.target.value)
                         }
                         placeholder={t("ingredientNamePlaceholder")}
-                        className="flex-1"
+                        className="flex-1 min-w-[140px]"
                       />
                       <Input
                         value={ing.quantity}

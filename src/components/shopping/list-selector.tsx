@@ -61,7 +61,7 @@ export function ListSelector({
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-background border shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-background border shadow-sm md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
                   onEditList(list.id);

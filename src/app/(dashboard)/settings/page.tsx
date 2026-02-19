@@ -44,7 +44,7 @@ function SettingsContent() {
       <h1 className="text-2xl font-bold tracking-tight">{tNav("settings")}</h1>
 
       <Tabs defaultValue={defaultTab}>
-        <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
+        <TabsList className="flex flex-wrap w-full !h-auto justify-start gap-1">
           <TabsTrigger value="profile">
             <User className="mr-1.5 h-4 w-4" />
             {t("tabProfile")}

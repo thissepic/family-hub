@@ -196,7 +196,7 @@ export function ConnectionCard({ connection }: ConnectionCardProps) {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-2">
             {connection.status !== "ACTIVE" && (
               <Button
                 variant="default"
