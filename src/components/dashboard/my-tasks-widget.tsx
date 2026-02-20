@@ -9,13 +9,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc/client";
 import Link from "next/link";
 
-export function MyTasksWidget() {
+interface MyTasksWidgetProps {
+  memberId?: string;
+}
+
+export function MyTasksWidget({ memberId }: MyTasksWidgetProps) {
   const t = useTranslations("dashboard");
   const trpc = useTRPC();
 
-  const { data, isLoading } = useQuery(
-    trpc.tasks.listForToday.queryOptions({})
-  );
+  const { data, isLoading } = useQuery({
+    ...trpc.tasks.listForToday.queryOptions({
+      memberIds: memberId ? [memberId] : undefined,
+    }),
+    enabled: !!memberId,
+  });
 
   // Deduplicate tasks: listForToday groups by member, so multi-assignee tasks
   // appear in multiple groups. We flatten and keep only the first occurrence.

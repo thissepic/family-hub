@@ -25,14 +25,21 @@ const STATUS_I18N: Record<string, string> = {
   SKIPPED: "statusSkipped",
 };
 
-export function MyChoresWidget() {
+interface MyChoresWidgetProps {
+  memberId?: string;
+}
+
+export function MyChoresWidget({ memberId }: MyChoresWidgetProps) {
   const t = useTranslations("dashboard");
   const tChores = useTranslations("chores");
   const trpc = useTRPC();
 
-  const { data, isLoading } = useQuery(
-    trpc.chores.listMyInstances.queryOptions({})
-  );
+  const { data, isLoading } = useQuery({
+    ...trpc.chores.listMyInstances.queryOptions({
+      memberIds: memberId ? [memberId] : undefined,
+    }),
+    enabled: !!memberId,
+  });
 
   const allInstances = data?.flatMap((group) => group.instances) ?? [];
   const pending = allInstances.filter((i) => i.status === "PENDING" || i.status === "OVERDUE");
