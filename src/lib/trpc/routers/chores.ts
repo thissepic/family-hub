@@ -699,15 +699,29 @@ export const choresRouter = router({
         });
       }
 
-      // Verify target is in the rotation pool
-      const targetInPool = instance.chore.assignees.some(
-        (a) => a.memberId === input.targetMemberId
-      );
-      if (!targetInPool) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Target member is not in the chore rotation pool",
+      if (input.isTransfer) {
+        // For transfers, verify target is in the same family
+        const targetMember = await db.familyMember.findUnique({
+          where: { id: input.targetMemberId },
+          select: { familyId: true },
         });
+        if (!targetMember || targetMember.familyId !== familyId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Target member is not in the same family",
+          });
+        }
+      } else {
+        // For swaps, verify target is in the rotation pool
+        const targetInPool = instance.chore.assignees.some(
+          (a) => a.memberId === input.targetMemberId
+        );
+        if (!targetInPool) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Target member is not in the chore rotation pool",
+          });
+        }
       }
 
       // Check for existing pending swap

@@ -11,7 +11,7 @@ import {
   Check,
   Clock,
   Pencil,
-  ArrowLeftRight,
+  ArrowRight,
   SkipForward,
   ShieldCheck,
   Undo2,
@@ -238,9 +238,9 @@ export function ChoreInstanceCard({
                   size="icon"
                   className="h-7 w-7"
                   onClick={() => onSwap(instance.id)}
-                  title={t("swapRequest")}
+                  title={t("transferOrSwap")}
                 >
-                  <ArrowLeftRight className="h-3.5 w-3.5" />
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
               )}
               <Button

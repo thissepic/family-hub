@@ -80,6 +80,7 @@ export const uncompleteInstanceInput = z.object({
 export const requestSwapInput = z.object({
   instanceId: z.string(),
   targetMemberId: z.string(),
+  isTransfer: z.boolean().optional(),
 });
 
 export const respondToSwapInput = z.object({

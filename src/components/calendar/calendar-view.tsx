@@ -182,6 +182,7 @@ export function CalendarView({
       plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
       initialView="dayGridMonth"
       locale={locale}
+      firstDay={1}
       headerToolbar={{
         left: "today prev,next",
         center: "title",
