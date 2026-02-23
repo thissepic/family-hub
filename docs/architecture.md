@@ -383,8 +383,11 @@ Server startup (instrumentation.ts)
   │
   ├── startMaintenanceWorker()
   │     ├── cleanup-old-notifications   "0 3 * * *"     (daily 3:00 AM)
+  │     ├── cleanup-expired-tokens      "0 4 * * *"     (daily 4:00 AM)
+  │     ├── daily-backup                "30 4 * * *"    (daily 4:30 AM)
   │     ├── weekly-recap                "0 18 * * 0"    (Sunday 6:00 PM)
-  │     └── daily-backup                "30 3 * * *"    (daily 3:30 AM)
+  │     ├── chore-deadline-reminders    "0 8 * * *"     (daily 8:00 AM)
+  │     └── calendar-event-reminders    "0 7 * * *"     (daily 7:00 AM)
   │
   ├── startSyncWorker()
   │     └── periodic-sync              "*/5 * * * *"   (every 5 minutes)

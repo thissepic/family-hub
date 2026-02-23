@@ -182,15 +182,20 @@ Members can request to swap their assigned instance with another member.
 1. Alice has an instance for "Vacuum Living Room" this week
 2. Alice calls chores.requestSwap({ instanceId, targetMemberId: bob.id })
 3. ChoreSwapRequest created: status = PENDING
-4. Bob sees the request in chores.mySwapRequests
-5. Bob calls chores.respondToSwap({ requestId, accept: true })
-6. If accepted:
+4. Bob receives a SWAP_REQUEST push notification
+5. Bob sees the request in chores.mySwapRequests
+6. Bob calls chores.respondToSwap({ requestId, accept: true })
+7. If accepted:
    - Instance.assignedMemberId changes from Alice → Bob
    - SwapRequest.status = ACCEPTED
-7. If declined:
+   - Alice receives a push notification that the swap was accepted
+8. If declined:
    - SwapRequest.status = DECLINED
    - Instance unchanged
+   - Alice receives a push notification that the swap was declined
 ```
+
+Push notifications are sent as `SWAP_REQUEST` type and can be muted per member in Settings → Notifications.
 
 ## XP Rewards
 

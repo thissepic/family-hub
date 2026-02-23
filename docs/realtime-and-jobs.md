@@ -118,8 +118,11 @@ All queues use Redis (via `ioredis`) for job storage and scheduling.
 | Job Name | Schedule | Description |
 |---|---|---|
 | `cleanup-old-notifications` | `0 3 * * *` (daily 3:00 AM) | Delete read notifications older than 30 days |
+| `cleanup-expired-tokens` | `0 4 * * *` (daily 4:00 AM) | Delete expired and old used email tokens |
+| `daily-backup` | `30 4 * * *` (daily 4:30 AM) | `pg_dump` + gzip, prune old backups |
 | `weekly-recap` | `0 18 * * 0` (Sunday 6:00 PM) | Generate weekly family recap notification |
-| `daily-backup` | `30 3 * * *` (daily 3:30 AM) | `pg_dump` + gzip, prune old backups |
+| `chore-deadline-reminders` | `0 8 * * *` (daily 8:00 AM) | Notify members about chores due today |
+| `calendar-event-reminders` | `0 7 * * *` (daily 7:00 AM) | Notify members about calendar events today |
 
 ### Calendar Sync Jobs
 
@@ -223,6 +226,27 @@ The weekly recap job generates a summary notification for each family:
 5. Create an `ADMIN_ANNOUNCEMENT` notification for each member (respecting mute preferences)
 6. Create an activity event
 
+### Chore Deadline Reminders
+
+The `chore-deadline-reminders` job runs daily at 8:00 AM:
+
+1. Query all `ChoreInstance` records with `status = PENDING` and `periodEnd = today`
+2. For each instance:
+   - Group tasks (`ALL_TOGETHER`): notify all `instanceAssignees`
+   - Rotation tasks: notify the `assignedMember`
+3. Create `CHORE_DEADLINE` notification + send Web Push for each member
+
+### Calendar Event Reminders
+
+The `calendar-event-reminders` job runs daily at 7:00 AM:
+
+1. Query non-recurring `CalendarEvent` records starting today
+2. Query recurring events and check if today matches the recurrence rule (via `rrulestr`)
+3. For each matching event, notify all assignees
+4. Create `CALENDAR_REMINDER` notification + send Web Push
+
+This type is **muted by default** — members must enable it in Settings → Notifications.
+
 ### Daily Backup
 
 The backup job runs `pg_dump`:
@@ -299,6 +323,26 @@ The service worker handles push notifications:
 3. If found → focus and navigate to linkUrl
 4. If not found → open new window at linkUrl
 ```
+
+### Push Notification Types
+
+The system supports seven notification types. Each can be muted per member in Settings → Notifications.
+
+| Type | Trigger | Default |
+|---|---|---|
+| `CALENDAR_REMINDER` | Scheduled job (daily 7 AM): events happening today | **Muted** |
+| `CHORE_DEADLINE` | Scheduled job (daily 8 AM): chores due today | Active |
+| `SWAP_REQUEST` | Swap/transfer requested, accepted, or declined | Active |
+| `REWARD_APPROVAL` | Reward redemption approved or declined | Active |
+| `ACHIEVEMENT` | Achievement unlocked | Active |
+| `LEVEL_UP` | Member reached a new XP level | Active |
+| `ADMIN_ANNOUNCEMENT` | Weekly recap and admin broadcasts | Active |
+
+When no preference row exists for a member+type combination, the type is active by default — except for `CALENDAR_REMINDER`, which is muted by default. Members must explicitly enable it in settings. This is controlled by the `DEFAULT_MUTED_TYPES` set in `src/lib/notifications/create-notification.ts`.
+
+### iOS (PWA) Support
+
+Web Push on iOS requires iOS 16.4+ and the PWA must be installed on the home screen. The app includes Apple-specific meta tags (`apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-touch-icon`) to support home screen installation. Push notifications do not work in regular Safari on iOS — only from the installed PWA.
 
 ### Registration
 

@@ -172,6 +172,14 @@ docker compose up -d
 
 Caddy automatically obtains TLS certificates via Let's Encrypt. The app is available at `https://<DOMAIN>`.
 
+**Important:** `NEXT_PUBLIC_*` variables are baked into the JavaScript bundle at build time. When you change these values, you must rebuild the image:
+
+```bash
+docker compose down && docker compose build --no-cache && docker compose up -d
+```
+
+The Dockerfile and docker-compose.yml are configured to pass `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SOCKET_URL`, and `NEXT_PUBLIC_VAPID_PUBLIC_KEY` as build arguments automatically from your `.env` file.
+
 ### Architecture
 
 ```
@@ -335,11 +343,13 @@ Registration creates a user account with email and password (or OAuth). After re
 
 ## PWA & Offline Support
 
-Family Hub is installable as a Progressive Web App:
+Family Hub is installable as a Progressive Web App on both Android and iOS:
 
-- **Manifest** at `/manifest.json` &mdash; standalone display, themed icons
+- **Manifest** at `/manifest.json` &mdash; standalone display, themed icons, installability metadata
 - **Service Worker** caches static assets and provides an offline fallback page
-- **Web Push** notifications for chore deadlines, calendar reminders, achievement unlocks, etc.
+- **Web Push** notifications via VAPID for chore deadlines, swap requests, calendar reminders, achievements, level-ups, reward approvals, and admin announcements
+- **Apple PWA support** &mdash; meta tags for home screen installation (`apple-mobile-web-app-capable`, `apple-touch-icon`)
+- **iOS note:** Push notifications require iOS 16.4+ and the PWA must be added to the home screen. Regular Safari does not support Web Push on iOS.
 - Build ID is injected into the service worker at build time to ensure cache busting on deploys
 
 ## Internationalization
