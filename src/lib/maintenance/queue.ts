@@ -67,6 +67,20 @@ export async function enqueueMaintenanceJobs(): Promise<void> {
     {},
     { repeat: { pattern: "30 4 * * *" } }
   );
+
+  // Chore deadline reminders — daily at 8:00 AM
+  await q.add(
+    "chore-deadline-reminders",
+    {},
+    { repeat: { pattern: "0 8 * * *" } }
+  );
+
+  // Calendar event reminders — daily at 7:00 AM
+  await q.add(
+    "calendar-event-reminders",
+    {},
+    { repeat: { pattern: "0 7 * * *" } }
+  );
 }
 
 export { getConnection };

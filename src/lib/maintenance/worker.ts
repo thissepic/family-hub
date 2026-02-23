@@ -1,6 +1,9 @@
 import { Worker, type Job } from "bullmq";
 import { getConnection } from "./queue";
 import { db } from "@/lib/db";
+import { createNotification } from "@/lib/notifications/create-notification";
+import { sendPush } from "@/lib/notifications/push";
+import { rrulestr } from "rrule";
 
 async function handleCleanupNotifications() {
   const thirtyDaysAgo = new Date();
@@ -249,6 +252,128 @@ async function handleDailyBackup() {
   }
 }
 
+async function handleChoreDeadlineReminders() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Find chore instances due today that are still pending
+  const dueInstances = await db.choreInstance.findMany({
+    where: {
+      status: "PENDING",
+      periodEnd: { gte: today, lt: tomorrow },
+    },
+    include: {
+      chore: { select: { title: true, rotationPattern: true } },
+      assignedMember: { select: { id: true } },
+      instanceAssignees: { select: { memberId: true } },
+    },
+  });
+
+  let sent = 0;
+  for (const instance of dueInstances) {
+    // For group tasks, notify all assignees; otherwise notify the assigned member
+    const memberIds =
+      instance.chore.rotationPattern === "ALL_TOGETHER"
+        ? instance.instanceAssignees.map((a) => a.memberId)
+        : instance.assignedMember
+          ? [instance.assignedMember.id]
+          : [];
+
+    for (const memberId of memberIds) {
+      const notif = await createNotification(db, {
+        memberId,
+        type: "CHORE_DEADLINE",
+        title: "Chore due today",
+        message: `"${instance.chore.title}" is due today`,
+        linkUrl: "/chores",
+      });
+      if (notif) {
+        sendPush(notif.memberId, {
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+        }).catch(() => {});
+        sent++;
+      }
+    }
+  }
+
+  console.log(`[Maintenance] Chore deadline reminders: ${sent} sent for ${dueInstances.length} instances`);
+}
+
+async function handleCalendarEventReminders() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Find non-recurring events starting today
+  const todayEvents = await db.calendarEvent.findMany({
+    where: {
+      startAt: { gte: today, lt: tomorrow },
+      recurrenceRule: null,
+    },
+    include: {
+      assignees: { select: { memberId: true } },
+    },
+  });
+
+  // Find recurring events that may have an instance today
+  const recurringEvents = await db.calendarEvent.findMany({
+    where: {
+      recurrenceRule: { not: null },
+      startAt: { lte: tomorrow },
+    },
+    include: {
+      assignees: { select: { memberId: true } },
+    },
+  });
+
+  const eventsToNotify = [...todayEvents];
+
+  for (const event of recurringEvents) {
+    if (!event.recurrenceRule) continue;
+    try {
+      const rule = rrulestr(event.recurrenceRule, { dtstart: event.startAt });
+      const occurrences = rule.between(today, tomorrow, true);
+      if (occurrences.length > 0) {
+        eventsToNotify.push(event);
+      }
+    } catch {
+      // Skip events with invalid recurrence rules
+    }
+  }
+
+  let sent = 0;
+  for (const event of eventsToNotify) {
+    const timeStr = event.allDay
+      ? "all day"
+      : event.startAt.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+
+    for (const assignee of event.assignees) {
+      const notif = await createNotification(db, {
+        memberId: assignee.memberId,
+        type: "CALENDAR_REMINDER",
+        title: "Event today",
+        message: `"${event.title}" — ${timeStr}`,
+        linkUrl: "/calendar",
+      });
+      if (notif) {
+        sendPush(notif.memberId, {
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+        }).catch(() => {});
+        sent++;
+      }
+    }
+  }
+
+  console.log(`[Maintenance] Calendar reminders: ${sent} sent for ${eventsToNotify.length} events`);
+}
+
 export function createMaintenanceWorker(): Worker {
   const worker = new Worker(
     "maintenance",
@@ -262,6 +387,10 @@ export function createMaintenanceWorker(): Worker {
           return handleCleanupExpiredTokens();
         case "daily-backup":
           return handleDailyBackup();
+        case "chore-deadline-reminders":
+          return handleChoreDeadlineReminders();
+        case "calendar-event-reminders":
+          return handleCalendarEventReminders();
         default:
           console.warn(`[Maintenance] Unknown job: ${job.name}`);
       }

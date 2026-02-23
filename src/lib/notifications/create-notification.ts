@@ -1,6 +1,11 @@
 import type { PrismaClient, NotificationType } from "@prisma/client";
 import { db } from "@/lib/db";
 
+/** Notification types that are muted by default (when no preference row exists). */
+const DEFAULT_MUTED_TYPES: ReadonlySet<NotificationType> = new Set([
+  "CALENDAR_REMINDER",
+]);
+
 type TxClient = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 
 interface CreateNotificationInput {
@@ -41,7 +46,8 @@ export async function createNotification(
     },
   });
 
-  if (preference?.muted) {
+  const isMuted = preference ? preference.muted : DEFAULT_MUTED_TYPES.has(input.type);
+  if (isMuted) {
     return null;
   }
 

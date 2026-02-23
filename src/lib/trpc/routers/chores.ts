@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { DIFFICULTY_CONFIG } from "@/lib/chores/constants";
 import { awardXp, removeXp, flushPendingPush } from "@/lib/rewards/xp-engine";
 import { ensureInstancesForFamily } from "@/lib/chores/generate-instances";
+import { createNotification } from "@/lib/notifications/create-notification";
+import { sendPush } from "@/lib/notifications/push";
 import type { ChoreDifficulty } from "@prisma/client";
 import { rrulestr } from "rrule";
 import {
@@ -672,11 +674,13 @@ export const choresRouter = router({
         include: {
           chore: {
             select: {
+              title: true,
               familyId: true,
               rotationPattern: true,
               assignees: { select: { memberId: true } },
             },
           },
+          assignedMember: { select: { name: true } },
         },
       });
 
@@ -739,13 +743,34 @@ export const choresRouter = router({
         });
       }
 
-      return db.choreSwapRequest.create({
+      const swapRequest = await db.choreSwapRequest.create({
         data: {
           choreInstanceId: input.instanceId,
           requesterId: memberId,
           targetMemberId: input.targetMemberId,
         },
       });
+
+      // Notify target member about the swap/transfer request
+      const requesterName = instance.assignedMember?.name ?? "Someone";
+      const choreTitle = instance.chore.title;
+      const action = input.isTransfer ? "transfer" : "swap";
+      const notif = await createNotification(db, {
+        memberId: input.targetMemberId,
+        type: "SWAP_REQUEST",
+        title: `Chore ${action} request`,
+        message: `${requesterName} wants to ${action} "${choreTitle}" with you`,
+        linkUrl: "/chores",
+      });
+      if (notif) {
+        sendPush(notif.memberId, {
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+        }).catch(() => {});
+      }
+
+      return swapRequest;
     }),
 
   respondToSwap: protectedProcedure
@@ -757,8 +782,9 @@ export const choresRouter = router({
         where: { id: input.swapRequestId },
         include: {
           choreInstance: {
-            include: { chore: { select: { familyId: true } } },
+            include: { chore: { select: { familyId: true, title: true } } },
           },
+          targetMember: { select: { name: true } },
         },
       });
 
@@ -783,8 +809,11 @@ export const choresRouter = router({
         });
       }
 
+      const choreTitle = swap.choreInstance.chore.title;
+      const responderName = swap.targetMember.name;
+
       if (input.accepted) {
-        return db.$transaction(async (tx) => {
+        const result = await db.$transaction(async (tx) => {
           // Update instance assignment
           await tx.choreInstance.update({
             where: { id: swap.choreInstanceId },
@@ -797,8 +826,26 @@ export const choresRouter = router({
             data: { status: "ACCEPTED", respondedAt: new Date() },
           });
 
-          return { status: "ACCEPTED" as const };
+          const notif = await createNotification(tx, {
+            memberId: swap.requesterId,
+            type: "SWAP_REQUEST",
+            title: "Swap request accepted",
+            message: `${responderName} accepted your swap request for "${choreTitle}"`,
+            linkUrl: "/chores",
+          });
+
+          return { status: "ACCEPTED" as const, pushNotif: notif };
         });
+
+        if (result.pushNotif) {
+          sendPush(result.pushNotif.memberId, {
+            title: result.pushNotif.title,
+            message: result.pushNotif.message,
+            linkUrl: result.pushNotif.linkUrl,
+          }).catch(() => {});
+        }
+
+        return { status: result.status };
       }
 
       // Decline
@@ -806,6 +853,21 @@ export const choresRouter = router({
         where: { id: input.swapRequestId },
         data: { status: "DECLINED", respondedAt: new Date() },
       });
+
+      const declineNotif = await createNotification(db, {
+        memberId: swap.requesterId,
+        type: "SWAP_REQUEST",
+        title: "Swap request declined",
+        message: `${responderName} declined your swap request for "${choreTitle}"`,
+        linkUrl: "/chores",
+      });
+      if (declineNotif) {
+        sendPush(declineNotif.memberId, {
+          title: declineNotif.title,
+          message: declineNotif.message,
+          linkUrl: declineNotif.linkUrl,
+        }).catch(() => {});
+      }
 
       return { status: "DECLINED" as const };
     }),

@@ -1,11 +1,15 @@
 {
+  "id": "/",
   "name": "Family Hub",
   "short_name": "FamilyHub",
   "description": "Your family's centralized command center",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#ffffff",
   "theme_color": "#3b82f6",
+  "categories": ["lifestyle", "productivity"],
   "icons": [
     {
       "src": "/icons/icon-192.png",

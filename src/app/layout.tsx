@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
@@ -23,6 +23,19 @@ export const metadata: Metadata = {
   title: "Family Hub",
   description: "Your family's centralized command center",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Family Hub",
+  },
+  icons: {
+    apple: [{ url: "/icons/icon-192.png", sizes: "192x192" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#3b82f6",
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({

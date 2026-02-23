@@ -12,6 +12,15 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
+
+# NEXT_PUBLIC_* vars must be available at build time (baked into JS bundle)
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_SOCKET_URL
+ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_SOCKET_URL=$NEXT_PUBLIC_SOCKET_URL
+ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
+
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
