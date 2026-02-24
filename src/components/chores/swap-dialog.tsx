@@ -47,6 +47,9 @@ export function SwapDialog({ instanceId, onOpenChange }: SwapDialogProps) {
         queryClient.invalidateQueries({ queryKey: [["chores"]] });
         onOpenChange(false);
       },
+      onError: (error) => {
+        toast.error(error.message ?? t("swapError"));
+      },
     })
   );
 

@@ -68,11 +68,25 @@ export async function enqueueMaintenanceJobs(): Promise<void> {
     { repeat: { pattern: "30 4 * * *" } }
   );
 
-  // Chore deadline reminders — daily at 8:00 AM
+  // Chore deadline reminders — every 15 minutes (supports per-chore due times)
   await q.add(
     "chore-deadline-reminders",
     {},
-    { repeat: { pattern: "0 8 * * *" } }
+    { repeat: { pattern: "*/15 * * * *" } }
+  );
+
+  // Task deadline reminders — every 15 minutes (for tasks with due time set)
+  await q.add(
+    "task-deadline-reminders",
+    {},
+    { repeat: { pattern: "*/15 * * * *" } }
+  );
+
+  // Early reminders — every 15 minutes (chores and tasks with reminderMinutesBefore)
+  await q.add(
+    "early-reminders",
+    {},
+    { repeat: { pattern: "*/15 * * * *" } }
   );
 
   // Calendar event reminders — daily at 7:00 AM

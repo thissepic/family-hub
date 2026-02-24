@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 
+const dueTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Must be HH:MM format");
 const choreDifficulty = z.enum(["EASY", "MEDIUM", "HARD"]);
 const rotationPattern = z.enum(["ROUND_ROBIN", "RANDOM", "WEIGHTED", "ALL_TOGETHER"]);
 const choreInstanceStatus = z.enum([
@@ -31,6 +32,8 @@ export const createChoreInput = z.object({
   needsVerification: z.boolean().default(false),
   rotationPattern: rotationPattern.default("ROUND_ROBIN"),
   assigneeIds: z.array(z.string()).min(1),
+  dueTime: dueTimeSchema.optional(),
+  reminderMinutesBefore: z.number().int().min(1).max(43200).optional(),
 });
 
 export const updateChoreInput = z.object({
@@ -44,6 +47,8 @@ export const updateChoreInput = z.object({
   needsVerification: z.boolean().optional(),
   rotationPattern: rotationPattern.optional(),
   assigneeIds: z.array(z.string()).min(1).optional(),
+  dueTime: dueTimeSchema.nullable().optional(),
+  reminderMinutesBefore: z.number().int().min(1).max(43200).nullable().optional(),
 });
 
 export const deleteChoreInput = z.object({

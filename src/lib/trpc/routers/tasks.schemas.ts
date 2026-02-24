@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 
+const dueTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Must be HH:MM format");
 const taskPriority = z.enum(["LOW", "MEDIUM", "HIGH"]);
 
 export const listTasksInput = z.object({
@@ -18,6 +19,8 @@ export const createTaskInput = z.object({
   priority: taskPriority.default("MEDIUM"),
   recurrenceRule: z.string().optional(),
   assigneeIds: z.array(z.string()).min(1),
+  dueTime: dueTimeSchema.optional(),
+  reminderMinutesBefore: z.number().int().min(1).max(43200).optional(),
 });
 
 export const updateTaskInput = z.object({
@@ -27,6 +30,8 @@ export const updateTaskInput = z.object({
   priority: taskPriority.optional(),
   recurrenceRule: z.string().nullable().optional(),
   assigneeIds: z.array(z.string()).min(1).optional(),
+  dueTime: dueTimeSchema.nullable().optional(),
+  reminderMinutesBefore: z.number().int().min(1).max(43200).nullable().optional(),
 });
 
 export const deleteTaskInput = z.object({
@@ -53,6 +58,8 @@ export const bulkCreateInput = z.object({
         priority: taskPriority.default("MEDIUM"),
         recurrenceRule: z.string().optional(),
         assigneeIds: z.array(z.string()).min(1),
+        dueTime: dueTimeSchema.optional(),
+        reminderMinutesBefore: z.number().int().min(1).max(43200).optional(),
       })
     )
     .min(1)

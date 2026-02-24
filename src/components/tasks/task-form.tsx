@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RecurrencePicker } from "@/components/calendar/recurrence-picker";
+import { TimeTogglePicker } from "@/components/ui/time-toggle-picker";
 import { PRIORITIES, PRIORITY_CONFIG } from "@/lib/tasks/constants";
 import type { TaskPriority } from "@prisma/client";
 
@@ -26,6 +27,8 @@ export interface TaskFormData {
   priority: TaskPriority;
   recurrenceRule?: string;
   assigneeIds: string[];
+  dueTime?: string;
+  reminderMinutesBefore?: number;
 }
 
 interface TaskFormProps {
@@ -56,6 +59,12 @@ export function TaskForm({
   const [assigneeIds, setAssigneeIds] = useState<string[]>(
     initialData?.assigneeIds ?? []
   );
+  const [dueTime, setDueTime] = useState<string | undefined>(
+    initialData?.dueTime
+  );
+  const [reminderMinutesBefore, setReminderMinutesBefore] = useState<number | undefined>(
+    initialData?.reminderMinutesBefore
+  );
 
   // Sync form state when initialData arrives asynchronously (e.g. edit mode)
   useEffect(() => {
@@ -65,10 +74,17 @@ export function TaskForm({
       setPriority((initialData.priority as TaskPriority) ?? "MEDIUM");
       setRecurrenceRule(initialData.recurrenceRule);
       setAssigneeIds(initialData.assigneeIds ?? []);
+      setDueTime(initialData.dueTime);
+      setReminderMinutesBefore(initialData.reminderMinutesBefore);
     }
   }, [initialData?.title, initialData?.recurrenceRule]);
 
   const { data: members } = useQuery(trpc.members.list.queryOptions());
+
+  const handleDueTimeChange = (time: string | undefined) => {
+    setDueTime(time);
+    if (!time) setReminderMinutesBefore(undefined);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +96,8 @@ export function TaskForm({
       priority,
       recurrenceRule,
       assigneeIds,
+      dueTime,
+      reminderMinutesBefore,
     });
   };
 
@@ -160,6 +178,15 @@ export function TaskForm({
           eventStartDate={new Date()}
         />
       </div>
+
+      {/* Due Time + Early Reminder */}
+      <TimeTogglePicker
+        dueTime={dueTime}
+        onDueTimeChange={handleDueTimeChange}
+        reminderMinutesBefore={reminderMinutesBefore}
+        onReminderChange={setReminderMinutesBefore}
+        t={t}
+      />
 
       {/* Assignees */}
       <div className="space-y-1.5">

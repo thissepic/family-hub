@@ -14,6 +14,8 @@ interface CreateNotificationInput {
   title: string;
   message: string;
   linkUrl?: string | null;
+  sourceModule?: string;
+  sourceId?: string;
 }
 
 interface CreateNotificationResult {
@@ -58,6 +60,8 @@ export async function createNotification(
       title: input.title,
       message: input.message,
       linkUrl: input.linkUrl ?? null,
+      sourceModule: input.sourceModule ?? null,
+      sourceId: input.sourceId ?? null,
     },
   });
 

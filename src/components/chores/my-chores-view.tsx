@@ -53,6 +53,10 @@ export function MyChoresView({
         }
         queryClient.invalidateQueries({ queryKey: [["chores"]] });
       },
+      onError: (error) => {
+        toast.error(error.message ?? t("swapError"));
+        queryClient.invalidateQueries({ queryKey: [["chores"]] });
+      },
     })
   );
 

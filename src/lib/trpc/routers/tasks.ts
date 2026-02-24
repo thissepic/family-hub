@@ -228,6 +228,8 @@ export const tasksRouter = router({
             description: input.description,
             priority: input.priority,
             recurrenceRule: normalizedCreateRule,
+            dueTime: input.dueTime,
+            reminderMinutesBefore: input.reminderMinutesBefore,
             createdById: ctx.session.memberId,
           },
         });
@@ -305,6 +307,8 @@ export const tasksRouter = router({
             ...(normalizedRule !== undefined && {
               recurrenceRule: normalizedRule,
             }),
+            ...(updateData.dueTime !== undefined && { dueTime: updateData.dueTime }),
+            ...(updateData.reminderMinutesBefore !== undefined && { reminderMinutesBefore: updateData.reminderMinutesBefore }),
           },
         });
 
@@ -497,6 +501,8 @@ export const tasksRouter = router({
               description: taskData.description,
               priority: taskData.priority,
               recurrenceRule: taskData.recurrenceRule,
+              dueTime: taskData.dueTime,
+              reminderMinutesBefore: taskData.reminderMinutesBefore,
               createdById: ctx.session.memberId,
             },
           });

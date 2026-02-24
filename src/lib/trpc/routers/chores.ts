@@ -51,6 +51,8 @@ const instanceInclude = {
       needsVerification: true,
       estimatedMinutes: true,
       rotationPattern: true,
+      dueTime: true,
+      reminderMinutesBefore: true,
       assignees: {
         include: {
           member: { select: { id: true, name: true, color: true } },
@@ -142,6 +144,8 @@ export const choresRouter = router({
           estimatedMinutes: input.estimatedMinutes,
           needsVerification: input.needsVerification,
           rotationPattern: input.rotationPattern,
+          dueTime: input.dueTime,
+          reminderMinutesBefore: input.reminderMinutesBefore,
           createdById: memberId,
         },
       });
@@ -202,6 +206,8 @@ export const choresRouter = router({
           estimatedMinutes: input.estimatedMinutes,
           needsVerification: input.needsVerification,
           rotationPattern: input.rotationPattern,
+          ...(input.dueTime !== undefined && { dueTime: input.dueTime }),
+          ...(input.reminderMinutesBefore !== undefined && { reminderMinutesBefore: input.reminderMinutesBefore }),
         },
       });
 
@@ -688,6 +694,14 @@ export const choresRouter = router({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
+      // Only allow swaps on pending instances
+      if (instance.status !== "PENDING") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only pending chores can be swapped or transferred",
+        });
+      }
+
       // Swaps not allowed for group tasks
       if (instance.chore.rotationPattern === "ALL_TOGETHER") {
         throw new TRPCError({
@@ -728,11 +742,10 @@ export const choresRouter = router({
         }
       }
 
-      // Check for existing pending swap
+      // Check for any existing pending swap on this instance (not just from this requester)
       const existingSwap = await db.choreSwapRequest.findFirst({
         where: {
           choreInstanceId: input.instanceId,
-          requesterId: memberId,
           status: "PENDING",
         },
       });
@@ -813,6 +826,25 @@ export const choresRouter = router({
       const responderName = swap.targetMember.name;
 
       if (input.accepted) {
+        // Verify the instance is still PENDING and still assigned to the requester
+        if (swap.choreInstance.status !== "PENDING") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "This chore is no longer pending",
+          });
+        }
+        if (swap.choreInstance.assignedMemberId !== swap.requesterId) {
+          // Instance was already reassigned (e.g. by another swap) — auto-decline this stale request
+          await db.choreSwapRequest.update({
+            where: { id: input.swapRequestId },
+            data: { status: "DECLINED", respondedAt: new Date() },
+          });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "This chore has already been reassigned",
+          });
+        }
+
         const result = await db.$transaction(async (tx) => {
           // Update instance assignment
           await tx.choreInstance.update({
@@ -820,10 +852,34 @@ export const choresRouter = router({
             data: { assignedMemberId: swap.targetMemberId },
           });
 
+          // Also update the instanceAssignee record so the grouping in
+          // listMyInstances (which checks instanceAssignees first) reflects
+          // the new assignee.  Swaps are blocked for group tasks, so there
+          // is exactly one instanceAssignee to replace.
+          await tx.choreInstanceAssignee.deleteMany({
+            where: { choreInstanceId: swap.choreInstanceId },
+          });
+          await tx.choreInstanceAssignee.create({
+            data: {
+              choreInstanceId: swap.choreInstanceId,
+              memberId: swap.targetMemberId,
+            },
+          });
+
           // Update swap status
           await tx.choreSwapRequest.update({
             where: { id: input.swapRequestId },
             data: { status: "ACCEPTED", respondedAt: new Date() },
+          });
+
+          // Cancel any other pending swap requests for this instance
+          await tx.choreSwapRequest.updateMany({
+            where: {
+              choreInstanceId: swap.choreInstanceId,
+              status: "PENDING",
+              id: { not: input.swapRequestId },
+            },
+            data: { status: "DECLINED", respondedAt: new Date() },
           });
 
           const notif = await createNotification(tx, {

@@ -27,6 +27,7 @@ import {
 } from "@/lib/chores/constants";
 import type { ChoreCategory } from "@/lib/chores/constants";
 import { RecurrencePicker } from "@/components/calendar/recurrence-picker";
+import { TimeTogglePicker } from "@/components/ui/time-toggle-picker";
 import type {
   ChoreDifficulty,
   RotationPattern,
@@ -42,6 +43,8 @@ export interface ChoreFormData {
   needsVerification: boolean;
   rotationPattern: RotationPattern;
   assigneeIds: string[];
+  dueTime?: string;
+  reminderMinutesBefore?: number;
 }
 
 interface ChoreFormProps {
@@ -86,8 +89,19 @@ export function ChoreForm({
   const [assigneeIds, setAssigneeIds] = useState<string[]>(
     initialData?.assigneeIds ?? []
   );
+  const [dueTime, setDueTime] = useState<string | undefined>(
+    initialData?.dueTime
+  );
+  const [reminderMinutesBefore, setReminderMinutesBefore] = useState<number | undefined>(
+    initialData?.reminderMinutesBefore
+  );
 
   const { data: members } = useQuery(trpc.members.list.queryOptions());
+
+  const handleDueTimeChange = (time: string | undefined) => {
+    setDueTime(time);
+    if (!time) setReminderMinutesBefore(undefined);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,6 +119,8 @@ export function ChoreForm({
       needsVerification,
       rotationPattern,
       assigneeIds,
+      dueTime,
+      reminderMinutesBefore,
     });
   };
 
@@ -169,6 +185,15 @@ export function ChoreForm({
           eventStartDate={new Date()}
         />
       </div>
+
+      {/* Due Time + Early Reminder */}
+      <TimeTogglePicker
+        dueTime={dueTime}
+        onDueTimeChange={handleDueTimeChange}
+        reminderMinutesBefore={reminderMinutesBefore}
+        onReminderChange={setReminderMinutesBefore}
+        t={t}
+      />
 
       {/* Difficulty + Estimated Time (side by side) */}
       <div className="grid gap-3 sm:grid-cols-2">

@@ -36,7 +36,8 @@ export function TopNav({ onSearchOpen, memberName, memberColor, memberAvatar }: 
 
   const switchProfileMutation = useMutation(
     trpc.auth.switchProfile.mutationOptions({
-      onSuccess: () => {
+      onSuccess: async () => {
+        await queryClient.cancelQueries();
         queryClient.clear();
         router.push("/profiles");
         router.refresh();
@@ -46,7 +47,8 @@ export function TopNav({ onSearchOpen, memberName, memberColor, memberAvatar }: 
 
   const switchFamilyMutation = useMutation(
     trpc.auth.switchFamily.mutationOptions({
-      onSuccess: () => {
+      onSuccess: async () => {
+        await queryClient.cancelQueries();
         queryClient.clear();
         router.push("/families");
         router.refresh();
@@ -56,7 +58,8 @@ export function TopNav({ onSearchOpen, memberName, memberColor, memberAvatar }: 
 
   const logoutMutation = useMutation(
     trpc.auth.logout.mutationOptions({
-      onSuccess: () => {
+      onSuccess: async () => {
+        await queryClient.cancelQueries();
         queryClient.clear();
         router.push("/login");
         router.refresh();

@@ -384,9 +384,11 @@ model Task {
   familyId       String
   title          String
   description    String?
-  priority       TaskPriority @default(MEDIUM)
-  recurrenceRule String?
-  createdById    String?
+  priority              TaskPriority @default(MEDIUM)
+  recurrenceRule        String?
+  dueTime               String?      // "HH:MM" format, e.g. "14:30". Null = no specific time
+  reminderMinutesBefore Int?         // Minutes before dueTime for early reminder. Null = none
+  createdById           String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -435,8 +437,10 @@ model Chore {
   difficulty       ChoreDifficulty @default(MEDIUM)
   estimatedMinutes Int?
   needsVerification Boolean        @default(false)
-  rotationPattern  RotationPattern @default(ROUND_ROBIN)
-  createdById      String?
+  rotationPattern       RotationPattern @default(ROUND_ROBIN)
+  dueTime               String?          // "HH:MM" format, e.g. "14:30". Null = default 8AM push
+  reminderMinutesBefore Int?             // Minutes before dueTime for early reminder. Null = none
+  createdById           String?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 

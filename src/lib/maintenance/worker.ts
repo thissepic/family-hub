@@ -252,8 +252,43 @@ async function handleDailyBackup() {
   }
 }
 
+/**
+ * Parse "HH:MM" string into { hours, minutes }.
+ */
+function parseHHMM(time: string): { hours: number; minutes: number } {
+  const [h, m] = time.split(":").map(Number);
+  return { hours: h, minutes: m };
+}
+
+/**
+ * Check if a target time (HH:MM) falls within the 15-minute window ending at `now`.
+ * Window: [now - 15min, now)
+ */
+function isInCurrentWindow(targetHHMM: string, now: Date): boolean {
+  const { hours, minutes } = parseHHMM(targetHHMM);
+  const target = new Date(now);
+  target.setHours(hours, minutes, 0, 0);
+
+  const windowStart = new Date(now.getTime() - 15 * 60 * 1000);
+  return target >= windowStart && target < now;
+}
+
+/**
+ * Subtract minutes from an HH:MM string, returning a new HH:MM string.
+ * Clamps to 00:00 if result goes before midnight (does not wrap to previous day).
+ */
+function subtractMinutesFromHHMM(time: string, minutesToSubtract: number): string {
+  const { hours, minutes } = parseHHMM(time);
+  const totalMinutes = hours * 60 + minutes - minutesToSubtract;
+  if (totalMinutes < 0) return "00:00";
+  const h = Math.floor(totalMinutes / 60) % 24;
+  const m = totalMinutes % 60;
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
 async function handleChoreDeadlineReminders() {
-  const today = new Date();
+  const now = new Date();
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -265,7 +300,7 @@ async function handleChoreDeadlineReminders() {
       periodEnd: { gte: today, lt: tomorrow },
     },
     include: {
-      chore: { select: { title: true, rotationPattern: true } },
+      chore: { select: { title: true, rotationPattern: true, dueTime: true } },
       assignedMember: { select: { id: true } },
       instanceAssignees: { select: { memberId: true } },
     },
@@ -273,6 +308,16 @@ async function handleChoreDeadlineReminders() {
 
   let sent = 0;
   for (const instance of dueInstances) {
+    const notifyTime = instance.chore.dueTime ?? "08:00";
+    if (!isInCurrentWindow(notifyTime, now)) continue;
+
+    // Deduplicate: check if deadline notification already sent today
+    const sourceId = `deadline-${instance.id}`;
+    const existing = await db.notification.findFirst({
+      where: { sourceModule: "chores", sourceId, createdAt: { gte: today } },
+    });
+    if (existing) continue;
+
     // For group tasks, notify all assignees; otherwise notify the assigned member
     const memberIds =
       instance.chore.rotationPattern === "ALL_TOGETHER"
@@ -288,6 +333,8 @@ async function handleChoreDeadlineReminders() {
         title: "Chore due today",
         message: `"${instance.chore.title}" is due today`,
         linkUrl: "/chores",
+        sourceModule: "chores",
+        sourceId,
       });
       if (notif) {
         sendPush(notif.memberId, {
@@ -301,6 +348,223 @@ async function handleChoreDeadlineReminders() {
   }
 
   console.log(`[Maintenance] Chore deadline reminders: ${sent} sent for ${dueInstances.length} instances`);
+}
+
+async function handleTaskDeadlineReminders() {
+  const now = new Date();
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+
+  // Only tasks with a dueTime set
+  const tasks = await db.task.findMany({
+    where: {
+      dueTime: { not: null },
+    },
+    include: {
+      assignees: {
+        include: { member: { select: { id: true } } },
+      },
+      completions: {
+        where: { date: today },
+      },
+    },
+  });
+
+  let sent = 0;
+  for (const task of tasks) {
+    if (!task.dueTime) continue;
+    // Check if task is active today (recurrence check)
+    if (!isTaskActiveOnDateWorker(task, today)) continue;
+    if (!isInCurrentWindow(task.dueTime, now)) continue;
+
+    const sourceId = `deadline-task-${task.id}-${today.toISOString().split("T")[0]}`;
+    const existing = await db.notification.findFirst({
+      where: { sourceModule: "tasks", sourceId, createdAt: { gte: today } },
+    });
+    if (existing) continue;
+
+    for (const assignee of task.assignees) {
+      // Skip if already completed today by this member
+      const completed = task.completions.some(
+        (c) => c.memberId === assignee.member.id
+      );
+      if (completed) continue;
+
+      const notif = await createNotification(db, {
+        memberId: assignee.member.id,
+        type: "CHORE_DEADLINE",
+        title: "Task due today",
+        message: `"${task.title}" is due at ${task.dueTime}`,
+        linkUrl: "/tasks",
+        sourceModule: "tasks",
+        sourceId,
+      });
+      if (notif) {
+        sendPush(notif.memberId, {
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+        }).catch(() => {});
+        sent++;
+      }
+    }
+  }
+
+  console.log(`[Maintenance] Task deadline reminders: ${sent} sent`);
+}
+
+async function handleEarlyReminders() {
+  const now = new Date();
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // --- Chore early reminders ---
+  const choreInstances = await db.choreInstance.findMany({
+    where: {
+      status: "PENDING",
+      periodEnd: { gte: today, lt: tomorrow },
+      chore: {
+        dueTime: { not: null },
+        reminderMinutesBefore: { not: null },
+      },
+    },
+    include: {
+      chore: {
+        select: {
+          title: true,
+          rotationPattern: true,
+          dueTime: true,
+          reminderMinutesBefore: true,
+        },
+      },
+      assignedMember: { select: { id: true } },
+      instanceAssignees: { select: { memberId: true } },
+    },
+  });
+
+  let sent = 0;
+  for (const instance of choreInstances) {
+    const { dueTime, reminderMinutesBefore } = instance.chore;
+    if (!dueTime || !reminderMinutesBefore) continue;
+
+    const earlyTime = subtractMinutesFromHHMM(dueTime, reminderMinutesBefore);
+    if (!isInCurrentWindow(earlyTime, now)) continue;
+
+    const sourceId = `early-${instance.id}`;
+    const existing = await db.notification.findFirst({
+      where: { sourceModule: "chores", sourceId, createdAt: { gte: today } },
+    });
+    if (existing) continue;
+
+    const memberIds =
+      instance.chore.rotationPattern === "ALL_TOGETHER"
+        ? instance.instanceAssignees.map((a) => a.memberId)
+        : instance.assignedMember
+          ? [instance.assignedMember.id]
+          : [];
+
+    for (const memberId of memberIds) {
+      const notif = await createNotification(db, {
+        memberId,
+        type: "CHORE_DEADLINE",
+        title: "Chore reminder",
+        message: `"${instance.chore.title}" is due at ${dueTime}`,
+        linkUrl: "/chores",
+        sourceModule: "chores",
+        sourceId,
+      });
+      if (notif) {
+        sendPush(notif.memberId, {
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+        }).catch(() => {});
+        sent++;
+      }
+    }
+  }
+
+  // --- Task early reminders ---
+  const tasks = await db.task.findMany({
+    where: {
+      dueTime: { not: null },
+      reminderMinutesBefore: { not: null },
+    },
+    include: {
+      assignees: {
+        include: { member: { select: { id: true } } },
+      },
+      completions: {
+        where: { date: today },
+      },
+    },
+  });
+
+  for (const task of tasks) {
+    if (!task.dueTime || !task.reminderMinutesBefore) continue;
+    if (!isTaskActiveOnDateWorker(task, today)) continue;
+
+    const earlyTime = subtractMinutesFromHHMM(task.dueTime, task.reminderMinutesBefore);
+    if (!isInCurrentWindow(earlyTime, now)) continue;
+
+    const dateStr = today.toISOString().split("T")[0];
+    const sourceId = `early-task-${task.id}-${dateStr}`;
+    const existing = await db.notification.findFirst({
+      where: { sourceModule: "tasks", sourceId, createdAt: { gte: today } },
+    });
+    if (existing) continue;
+
+    for (const assignee of task.assignees) {
+      const completed = task.completions.some(
+        (c) => c.memberId === assignee.member.id
+      );
+      if (completed) continue;
+
+      const notif = await createNotification(db, {
+        memberId: assignee.member.id,
+        type: "CHORE_DEADLINE",
+        title: "Task reminder",
+        message: `"${task.title}" is due at ${task.dueTime}`,
+        linkUrl: "/tasks",
+        sourceModule: "tasks",
+        sourceId,
+      });
+      if (notif) {
+        sendPush(notif.memberId, {
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+        }).catch(() => {});
+        sent++;
+      }
+    }
+  }
+
+  console.log(`[Maintenance] Early reminders: ${sent} sent`);
+}
+
+/**
+ * Check if a task is active on a given date based on its recurrence rule.
+ * Worker-local copy to avoid importing from tRPC router.
+ */
+function isTaskActiveOnDateWorker(
+  task: { createdAt: Date; recurrenceRule: string | null },
+  date: Date
+): boolean {
+  if (!task.recurrenceRule) return true;
+
+  const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+
+  try {
+    const rule = rrulestr(task.recurrenceRule, { dtstart: task.createdAt });
+    const occurrences = rule.between(startOfDay, endOfDay, true);
+    return occurrences.length > 0;
+  } catch {
+    return true;
+  }
 }
 
 async function handleCalendarEventReminders() {
@@ -389,6 +653,10 @@ export function createMaintenanceWorker(): Worker {
           return handleDailyBackup();
         case "chore-deadline-reminders":
           return handleChoreDeadlineReminders();
+        case "task-deadline-reminders":
+          return handleTaskDeadlineReminders();
+        case "early-reminders":
+          return handleEarlyReminders();
         case "calendar-event-reminders":
           return handleCalendarEventReminders();
         default:

@@ -41,7 +41,8 @@ export default function DashboardLayout({
 
   const switchBackMutation = useMutation(
     trpc.auth.selectProfile.mutationOptions({
-      onSuccess: () => {
+      onSuccess: async () => {
+        await queryClient.cancelQueries();
         queryClient.clear();
         router.push("/");
         router.refresh();

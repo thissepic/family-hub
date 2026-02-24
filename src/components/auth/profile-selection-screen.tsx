@@ -28,7 +28,8 @@ export function ProfileSelectionScreen() {
 
   const selectProfileMutation = useMutation(
     trpc.auth.selectProfile.mutationOptions({
-      onSuccess: () => {
+      onSuccess: async () => {
+        await queryClient.cancelQueries();
         queryClient.clear();
         router.push("/");
         router.refresh();
@@ -42,7 +43,8 @@ export function ProfileSelectionScreen() {
 
   const switchFamilyMutation = useMutation(
     trpc.auth.switchFamily.mutationOptions({
-      onSuccess: () => {
+      onSuccess: async () => {
+        await queryClient.cancelQueries();
         queryClient.clear();
         router.push("/families");
         router.refresh();
@@ -52,7 +54,8 @@ export function ProfileSelectionScreen() {
 
   const logoutMutation = useMutation(
     trpc.auth.logout.mutationOptions({
-      onSuccess: () => {
+      onSuccess: async () => {
+        await queryClient.cancelQueries();
         queryClient.clear();
         router.push("/login");
         router.refresh();
