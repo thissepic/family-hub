@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ export function RegisterWizard({ redirectTo }: { redirectTo?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
 
   // Detect OAuth registration mode
   const oauthProvider = searchParams.get("oauth");
@@ -92,6 +93,7 @@ export function RegisterWizard({ redirectTo }: { redirectTo?: string }) {
   };
 
   const handleContinue = () => {
+    queryClient.clear();
     router.push(redirectTo || "/families");
     router.refresh();
   };

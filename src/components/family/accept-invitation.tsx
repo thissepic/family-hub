@@ -38,7 +38,6 @@ export function AcceptInvitation({ token }: { token: string }) {
   const acceptMutation = useMutation(
     trpc.invitations.accept.mutationOptions({
       onSuccess: (result) => {
-        queryClient.clear();
         // Select the family after accepting
         selectFamilyMutation.mutate({ familyId: result.familyId });
       },
@@ -51,6 +50,7 @@ export function AcceptInvitation({ token }: { token: string }) {
   const selectFamilyMutation = useMutation(
     trpc.auth.selectFamily.mutationOptions({
       onSuccess: () => {
+        queryClient.clear();
         router.push("/");
         router.refresh();
       },
