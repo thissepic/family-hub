@@ -15,14 +15,28 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Loader2, Shield, Mail, ArrowLeft } from "lucide-react";
+import { Loader2, Shield, Mail, ArrowLeft, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { SecuritySettings } from "@/components/settings/security-settings";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export function AccountSettings() {
   const t = useTranslations("settings");
+  const tCommon = useTranslations("common");
   const tNav = useTranslations("nav");
   const trpc = useTRPC();
+  const router = useRouter();
 
   const { data: session } = useQuery(trpc.auth.getSession.queryOptions());
 
@@ -32,6 +46,16 @@ export function AccountSettings() {
   // Change Email state
   const [newEmail, setNewEmail] = useState("");
   const [emailPassword, setEmailPassword] = useState("");
+
+  // Delete Account state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+
+  const { data: linkedAccountsData } = useQuery(
+    trpc.account.getLinkedAccounts.queryOptions()
+  );
+  const hasPassword = linkedAccountsData?.hasPassword ?? true;
 
   const requestPasswordChangeMutation = useMutation(
     trpc.account.requestPasswordChange.mutationOptions({
@@ -64,6 +88,35 @@ export function AccountSettings() {
     changeEmailMutation.mutate({
       newEmail: newEmail.trim(),
       password: emailPassword,
+    });
+  };
+
+  const deleteAccountMutation = useMutation(
+    trpc.account.deleteAccount.mutationOptions({
+      onSuccess: () => {
+        toast.success(t("accountDeleted"));
+        router.push("/");
+      },
+      onError: (err) => {
+        if (err.message === "SOLE_ADMIN") {
+          toast.error(t("soleAdminError"));
+        } else if (err.message === "PASSWORD_REQUIRED") {
+          toast.error(t("deleteAccountPasswordRequired"));
+        } else if (err.message === "INVALID_PASSWORD") {
+          toast.error(t("deleteAccountInvalidPassword"));
+        } else {
+          toast.error(err.message);
+        }
+      },
+    })
+  );
+
+  const confirmWord = t("deleteConfirmWord");
+
+  const handleDeleteAccount = () => {
+    deleteAccountMutation.mutate({
+      confirmText: deleteConfirmText,
+      password: hasPassword ? deletePassword : undefined,
     });
   };
 
@@ -176,6 +229,91 @@ export function AccountSettings() {
 
         {/* 2FA, OAuth, Email Preferences */}
         <SecuritySettings />
+
+        {/* Danger Zone */}
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <CardTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              {t("deleteAccountDangerZone")}
+            </CardTitle>
+            <CardDescription>
+              {t("deleteAccountDangerZoneDescription")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AlertDialog
+              open={deleteDialogOpen}
+              onOpenChange={(open) => {
+                setDeleteDialogOpen(open);
+                if (!open) {
+                  setDeleteConfirmText("");
+                  setDeletePassword("");
+                }
+              }}
+            >
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive">{t("deleteAccount")}</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {t("deleteAccountConfirm")}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t("deleteAccountDescription")}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="py-4 space-y-4">
+                  {hasPassword && (
+                    <div className="space-y-2">
+                      <Label htmlFor="delete-password">
+                        {t("deleteAccountPassword")}
+                      </Label>
+                      <Input
+                        id="delete-password"
+                        type="password"
+                        value={deletePassword}
+                        onChange={(e) => setDeletePassword(e.target.value)}
+                        placeholder="********"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {t("deleteAccountPasswordDescription")}
+                      </p>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label>{t("typeDeleteConfirm", { word: confirmWord })}</Label>
+                    <Input
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      placeholder={confirmWord}
+                    />
+                  </div>
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>
+                    {tCommon("cancel")}
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteAccount}
+                    disabled={
+                      deleteAccountMutation.isPending ||
+                      deleteConfirmText !== confirmWord ||
+                      (hasPassword && !deletePassword)
+                    }
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {deleteAccountMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {t("deleteAccount")}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

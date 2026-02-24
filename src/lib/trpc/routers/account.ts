@@ -2,7 +2,7 @@ import { z } from "zod/v4";
 import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, userProcedure } from "../init";
 import { db } from "@/lib/db";
-import { setUserSession, getRequestMeta } from "@/lib/auth";
+import { setUserSession, getRequestMeta, clearSession } from "@/lib/auth";
 import {
   checkLoginRateLimit,
   checkAccountLockout,
@@ -834,5 +834,85 @@ export const accountRouter = router({
           enabled: input.enabled,
         },
       });
+    }),
+
+  /** Delete the current user account permanently. */
+  deleteAccount: userProcedure
+    .input(z.object({
+      confirmText: z.string(),
+      password: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.confirmText !== "DELETE" && input.confirmText !== "LÖSCHEN") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Confirmation text does not match",
+        });
+      }
+
+      // Verify identity: require password if account has one
+      const user = await db.user.findUnique({
+        where: { id: ctx.session.userId },
+        select: { passwordHash: true },
+      });
+
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+
+      if (user.passwordHash) {
+        if (!input.password) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "PASSWORD_REQUIRED",
+          });
+        }
+        const valid = await bcrypt.compare(input.password, user.passwordHash);
+        if (!valid) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "INVALID_PASSWORD",
+          });
+        }
+      }
+
+      // Check if user is the sole admin of any family
+      const adminMemberships = await db.familyMember.findMany({
+        where: {
+          userId: ctx.session.userId,
+          role: "ADMIN",
+        },
+        select: {
+          familyId: true,
+          family: { select: { name: true } },
+        },
+      });
+
+      for (const membership of adminMemberships) {
+        const otherAdmins = await db.familyMember.count({
+          where: {
+            familyId: membership.familyId,
+            role: "ADMIN",
+            userId: { not: ctx.session.userId },
+          },
+        });
+
+        if (otherAdmins === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "SOLE_ADMIN",
+          });
+        }
+      }
+
+      // Delete user (cascades handle related records)
+      await db.user.delete({
+        where: { id: ctx.session.userId },
+      });
+
+      // Clear the session
+      await clearSession();
+
+      return { deleted: true };
     }),
 });
