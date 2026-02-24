@@ -67,7 +67,7 @@ export function MyTasksWidget({ memberId }: MyTasksWidgetProps) {
                 ) : (
                   <Circle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 )}
-                <span className={task.completed ? "line-through text-muted-foreground" : ""}>
+                <span className={`truncate ${task.completed ? "line-through text-muted-foreground" : ""}`}>
                   {task.title}
                 </span>
               </div>

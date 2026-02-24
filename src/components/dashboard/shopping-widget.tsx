@@ -39,7 +39,7 @@ export function ShoppingWidget() {
             {lists.slice(0, 3).map((list) => (
               <div key={list.id} className="flex items-center justify-between text-sm">
                 <span className="truncate">{list.name}</span>
-                <span className="text-muted-foreground">{list._count?.items ?? 0}</span>
+                <span className="shrink-0 text-muted-foreground">{list._count?.items ?? 0}</span>
               </div>
             ))}
             <Link href="/shopping" className="block text-xs text-muted-foreground hover:underline">
