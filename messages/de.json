@@ -77,6 +77,7 @@
     "selectFamily": "Familie auswählen",
     "selectFamilyDescription": "Wähle eine Familie aus, um fortzufahren.",
     "pendingInvitations": "Offene Einladungen",
+    "invitedBy": "Eingeladen von {name}",
     "noFamilies": "Du bist noch kein Mitglied einer Familie.",
     "admin": "Admin",
     "member": "Mitglied",
